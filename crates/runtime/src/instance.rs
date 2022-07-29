@@ -30,7 +30,11 @@ use wasmtime_environ::{
     packed_option::ReservedValue, DataIndex, DefinedGlobalIndex, DefinedMemoryIndex,
     DefinedTableIndex, ElemIndex, EntityIndex, EntityRef, EntitySet, FuncIndex, GlobalIndex,
     GlobalInit, HostPtr, MemoryIndex, Module, PrimaryMap, SignatureIndex, TableIndex,
+<<<<<<< HEAD
     TableInitialization, TrapCode, VMOffsets, WasmType, WASM_EXTERN_REF, WASM_FUNC_REF,
+=======
+    TableInitialization, TrapCode, VMOffsets, WasmType, WasmRefType, WasmHeapType,
+>>>>>>> Make wasmtime-runtime type check
 };
 
 mod allocator;
@@ -1025,7 +1029,7 @@ impl Drop for Instance {
             };
             match global.wasm_ty {
                 // For now only externref globals need to get destroyed
-                WasmType::ExternRef => {}
+                WasmType::Ref(WasmRefType { heap_type: WasmHeapType::Extern, .. }) => {}
                 _ => continue,
             }
             unsafe {
