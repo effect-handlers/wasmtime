@@ -321,7 +321,7 @@ unsafe impl WasmTy for Option<ExternRef> {
 
     #[inline]
     fn valtype() -> ValType {
-        ValType::Ref(RefType { nullable: true, heap_type: HeapType::Func })
+        ValType::Ref(RefType { nullable: true, heap_type: HeapType::Extern })
     }
 
     #[inline]

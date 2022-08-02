@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 use std::sync::Arc;
 use wasmtime::*;
 
-const FUNC_REF : RefType = RefType { nullable: true, heap_type: HeapType::Func };
+const EXTERN_REF : RefType = RefType { nullable: true, heap_type: HeapType::Extern };
 
 struct SetFlagOnDrop(Arc<AtomicBool>);
 
