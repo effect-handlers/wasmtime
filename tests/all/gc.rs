@@ -4,6 +4,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 use std::sync::Arc;
 use wasmtime::*;
 
+const FUNC_REF : RefType = RefType { nullable: true, heap_type: HeapType::Func };
+
 struct SetFlagOnDrop(Arc<AtomicBool>);
 
 impl Drop for SetFlagOnDrop {
@@ -264,7 +266,7 @@ fn global_drops_externref() -> anyhow::Result<()> {
         let externref = ExternRef::new(SetFlagOnDrop(flag.clone()));
         Global::new(
             &mut store,
-            GlobalType::new(ValType::ExternRef, Mutability::Const),
+            GlobalType::new(ValType::Ref(EXTERN_REF), Mutability::Const),
             externref.into(),
         )?;
         drop(store);
@@ -313,7 +315,7 @@ fn table_drops_externref() -> anyhow::Result<()> {
         let externref = ExternRef::new(SetFlagOnDrop(flag.clone()));
         Table::new(
             &mut store,
-            TableType::new(ValType::ExternRef, 1, None),
+            TableType::new(EXTERN_REF, 1, None),
             externref.into(),
         )?;
         drop(store);
@@ -424,7 +426,7 @@ fn global_init_no_leak() -> anyhow::Result<()> {
     let externref = ExternRef::new(());
     let global = Global::new(
         &mut store,
-        GlobalType::new(ValType::ExternRef, Mutability::Const),
+        GlobalType::new(ValType::Ref(EXTERN_REF), Mutability::Const),
         externref.clone().into(),
     )?;
     Instance::new(&mut store, &module, &[global.into()])?;
