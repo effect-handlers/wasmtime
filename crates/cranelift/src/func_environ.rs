@@ -10,7 +10,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_frontend::Variable;
 use cranelift_wasm::{
     self, FuncIndex, FuncTranslationState, GlobalIndex, GlobalVariable, MemoryIndex, TableIndex,
-    TargetEnvironment, TypeIndex, WasmError, WasmResult, WasmType, WasmRefType, WasmHeapType,
+    TargetEnvironment, TypeIndex, WasmError, WasmResult, WasmType, WasmRefType, WasmHeapType, WASM_EXTERN_REF,
 };
 use std::convert::TryFrom;
 use std::mem;
@@ -1320,12 +1320,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         index: cranelift_wasm::GlobalIndex,
     ) -> WasmResult<ir::Value> {
-        // TODO(dhil) fixme: need to check that wasm_ty is indeed a Ref.
-        // debug_assert_eq!(
-        //     self.module.globals[index].wasm_ty,
-        //     WasmHeapType::Extern,
-        //     "We only use GlobalVariable::Custom for externref"
-        // );
+        debug_assert_eq!(
+            self.module.globals[index].wasm_ty,
+            WasmType::Ref(WASM_EXTERN_REF),
+            "We only use GlobalVariable::Custom for externref"
+        );
 
         let builtin_index = BuiltinFunctionIndex::externref_global_get();
         let builtin_sig = self
@@ -1349,12 +1348,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         index: cranelift_wasm::GlobalIndex,
         value: ir::Value,
     ) -> WasmResult<()> {
-        // TODO(dhil) fixme: need to check that wasm_ty is indeed a Ref.
-        // debug_assert_eq!(
-        //     self.module.globals[index].wasm_ty.heap_type,
-        //     WasmHeapType::Extern,
-        //     "We only use GlobalVariable::Custom for externref"
-        // );
+        debug_assert_eq!(
+            self.module.globals[index].wasm_ty,
+            WasmType::Ref(WASM_EXTERN_REF),
+            "We only use GlobalVariable::Custom for externref"
+        );
 
         let builtin_index = BuiltinFunctionIndex::externref_global_set();
         let builtin_sig = self
