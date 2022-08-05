@@ -82,6 +82,16 @@ pub struct WasmRefType {
     pub heap_type: WasmHeapType,
 }
 
+pub const WASM_EXTERN_REF : WasmRefType = WasmRefType {
+    nullable: true,
+    heap_type: WasmHeapType::Extern
+};
+
+pub const WASM_FUNC_REF : WasmRefType = WasmRefType {
+    nullable: true,
+    heap_type: WasmHeapType::Func
+};
+
 impl TryFrom<wasmparser::RefType> for WasmRefType {
     type Error = WasmError;
     fn try_from(wasmparser::RefType { nullable, heap_type }: wasmparser::RefType) -> Result<Self, Self::Error> {
