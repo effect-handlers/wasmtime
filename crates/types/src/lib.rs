@@ -69,7 +69,7 @@ impl fmt::Display for WasmType {
             WasmType::F32 => write!(f, "f32"),
             WasmType::F64 => write!(f, "f64"),
             WasmType::V128 => write!(f, "v128"),
-            WasmType::Ref(rt) => write!(f, "ref {}", rt),
+            WasmType::Ref(rt) => write!(f, "{}", rt),
             WasmType::Bot => write!(f, "bot"),
         }
     }
@@ -107,11 +107,17 @@ impl From<WasmRefType> for wasmparser::RefType {
 
 impl fmt::Display for WasmRefType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let WasmRefType { nullable, heap_type } = *self;
-        if nullable {
-            write!(f, "null ")?;
+        match (*self).heap_type {
+            WasmHeapType::Extern => write!(f, "externref"),
+            WasmHeapType::Func   => write!(f, "funcref"),
+            ht => {
+                if (*self).nullable {
+                    write!(f, "(ref null {})", ht)
+                } else {
+                    write!(f, "(ref {})", ht)
+                }
+            }
         }
-        write!(f, "{}", heap_type)
     }
 }
 
@@ -171,10 +177,10 @@ pub struct WasmFuncType {
 impl WasmFuncType {
     #[inline]
     pub fn new(params: Box<[WasmType]>, returns: Box<[WasmType]>) -> Self {
-        let externref_params_count = params.iter().filter(|p| match **p { WasmType::Ref(WasmRefType { heap_type: WasmHeapType::Extern, .. }) => true, _ => false }).count();
+        let externref_params_count = params.iter().filter(|p| match **p { WasmType::Ref(rt) => rt.heap_type == WasmHeapType::Extern, _ => false }).count();
         let externref_returns_count = returns
             .iter()
-            .filter(|r| match **r { WasmType::Ref(WasmRefType { heap_type: WasmHeapType::Extern, .. }) => true, _ => false })
+            .filter(|r| match **r { WasmType::Ref(rt) => rt.heap_type == WasmHeapType::Extern, _ => false })
             .count();
         WasmFuncType {
             params,

@@ -35,7 +35,7 @@
 
 (assert_unlinkable
   (module (import "m" "t externref" (table 0 funcref)))
-  "expected table of type `ref null func`, found table of type `ref null extern`") ;; TODO(dhil) fixme: I had to change the expected error message to make the testsuite pass.
+  "expected table of type `funcref`, found table of type `externref`")
 
 ;; errors on memories
 (assert_unlinkable

@@ -47,10 +47,8 @@ impl fmt::Display for ValType {
             ValType::F32 => write!(f, "f32"),
             ValType::F64 => write!(f, "f64"),
             ValType::V128 => write!(f, "v128"),
-            ValType::Ref(rt) => write!(f, "ref {}", rt),
+            ValType::Ref(rt) => write!(f, "{}", rt),
             ValType::Bot => write!(f, "bot"),
-            // ValType::ExternRef => write!(f, "externref"),
-            // ValType::FuncRef => write!(f, "funcref"),
         }
     }
 }
@@ -110,10 +108,16 @@ pub struct RefType {
 
 impl fmt::Display for RefType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.nullable {
-            write!(f, "null {}", self.heap_type)
-        } else {
-            write!(f, "{}", self.heap_type)
+        match self.heap_type {
+            HeapType::Extern => write!(f, "externref"),
+            HeapType::Func   => write!(f, "funcref"),
+            _ => {
+                if self.nullable {
+                    write!(f, "(ref null {})", self.heap_type)
+                } else {
+                    write!(f, "(ref {})", self.heap_type)
+                }
+            }
         }
     }
 }
@@ -147,7 +151,7 @@ impl fmt::Display for HeapType {
         match self {
             Self::Func => write!(f, "func"),
             Self::Extern => write!(f, "extern"),
-            Self::Index(i) => write!(f, "index({})", i), // TODO(dhil) fixme
+            Self::Index(i) => write!(f, "{}", i),
             Self::Bot => write!(f, "bot")
         }
     }
@@ -172,6 +176,16 @@ impl HeapType {
         }
     }
 }
+
+// pub const EXTERN_REF : RefType = RefType {
+//     nullable: true,
+//     heap_type: HeapType::Extern,
+// };
+
+// pub const FUNC_REF : RefType = RefType {
+//     nullable: true,
+//     heap_type: HeapType::Func,
+// };
 
 // External Types
 /// A list of all possible types which can be externally referenced from a
