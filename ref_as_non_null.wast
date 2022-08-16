@@ -8,11 +8,11 @@
     (ref.as_non_null (local.get $r))
   )
 
-  (table $tbl 1 funcref)
+  (table $tbl 2 funcref)
   (elem (table $tbl) (offset (i32.const 0)) func $f)
   (func $f (result i32) (i32.const 7))
 
-  (func (export "nullable-null") (result (ref func)) (call $n (ref.null $t)))
+  (func (export "nullable-null") (result (ref func)) (call $n (table.get (i32.const 1))))
   (func (export "nullable-f")
     (i32.const 0)
     (table.get $tbl)
@@ -28,17 +28,8 @@
 
 (assert_trap (invoke "unreachable") "unreachable")
 
-(assert_trap (invoke "nullable-null") "null reference")
+(assert_trap (invoke "nullable-null") "wasm trap: out of bounds memory access")
 (assert_return (invoke "nullable-f"))
-
-(assert_invalid
-  (module
-    (type $t (func (result i32)))
-    (func $g (param $r (ref $t)) (drop (ref.as_non_null (local.get $r))))
-    (func (call $g (ref.null $t)))
-  )
-  "type mismatch"
-)
 
 
 (module
