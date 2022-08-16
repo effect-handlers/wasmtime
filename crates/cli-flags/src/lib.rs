@@ -41,6 +41,10 @@ pub const SUPPORTED_WASM_FEATURES: &[(&str, &str)] = &[
     ("memory64", "enables support for 64-bit memories"),
     #[cfg(feature = "component-model")]
     ("component-model", "enables support for the component model"),
+    (
+        "function-references",
+        "enables support for typed function references",
+    ),
 ];
 
 pub const SUPPORTED_WASI_MODULES: &[(&str, &str)] = &[
@@ -337,6 +341,7 @@ impl CommonOptions {
             memory64,
             #[cfg(feature = "component-model")]
             component_model,
+            function_references,
         } = self.wasm_features.unwrap_or_default();
 
         if let Some(enable) = simd {
@@ -347,6 +352,9 @@ impl CommonOptions {
         }
         if let Some(enable) = reference_types {
             config.wasm_reference_types(enable);
+        }
+        if let Some(enable) = function_references {
+            config.wasm_function_references(enable);
         }
         if let Some(enable) = multi_value {
             config.wasm_multi_value(enable);
@@ -399,6 +407,7 @@ pub struct WasmFeatures {
     pub memory64: Option<bool>,
     #[cfg(feature = "component-model")]
     pub component_model: Option<bool>,
+    pub function_references: Option<bool>,
 }
 
 fn parse_wasm_features(features: &str) -> Result<WasmFeatures> {
@@ -449,6 +458,7 @@ fn parse_wasm_features(features: &str) -> Result<WasmFeatures> {
         memory64: all.or(values["memory64"]),
         #[cfg(feature = "component-model")]
         component_model: all.or(values["component-model"]),
+        function_references: all.or(values["function-references"]),
     })
 }
 
