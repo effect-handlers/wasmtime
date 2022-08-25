@@ -204,10 +204,14 @@ fn declare_locals<FE: FuncEnvironment + ?Sized>(
         }
         Ref(rt) => {
             match rt.heap_type {
-                wasmparser::HeapType::Extern | wasmparser::HeapType::Func => environ.translate_ref_null(builder.cursor(), rt.heap_type.try_into()?)?,
-                _ => todo!("Implement HeapType::Bot/Index in declare_locals.") // TODO(dhil) fixme
+                wasmparser::HeapType::Extern
+                | wasmparser::HeapType::Func
+                | wasmparser::HeapType::Index(_) => {
+                    environ.translate_ref_null(builder.cursor(), rt.heap_type.try_into()?)?
+                }
+                _ => todo!("Implement HeapType::Bot in declare_locals."), // TODO(dhil) fixme
             }
-        },
+        }
         Bot => todo!("Implement ValType::Bot in declare_locals."), // TODO(dhil) fixme: I reckon this one is trivial.
     };
 
@@ -238,7 +242,7 @@ fn parse_function_body<FE: FuncEnvironment + ?Sized>(
 
     environ.before_translate_function(builder, state)?;
     while !reader.eof() {
-        let ty : Option<wasmparser::ValType> = None; //validator.peek();  // TODO(dhil): Can we simply grab the type here?
+        let ty = validator.peek();
         let pos = reader.original_position();
         builder.set_srcloc(cur_srcloc(&reader));
         let op = reader.read_operator()?;
