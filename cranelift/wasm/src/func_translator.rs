@@ -238,12 +238,13 @@ fn parse_function_body<FE: FuncEnvironment + ?Sized>(
 
     environ.before_translate_function(builder, state)?;
     while !reader.eof() {
+        let ty : Option<wasmparser::ValType> = None; //validator.peek();  // TODO(dhil): Can we simply grab the type here?
         let pos = reader.original_position();
         builder.set_srcloc(cur_srcloc(&reader));
         let op = reader.read_operator()?;
         validator.op(pos, &op)?;
         environ.before_translate_operator(&op, builder, state)?;
-        translate_operator(validator, &op, builder, state, environ)?;
+        translate_operator(validator, &op, builder, state, environ, ty)?;
         environ.after_translate_operator(&op, builder, state)?;
     }
     environ.after_translate_function(builder, state)?;

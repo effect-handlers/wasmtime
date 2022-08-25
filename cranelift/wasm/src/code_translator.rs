@@ -94,7 +94,7 @@ use smallvec::SmallVec;
 use std::cmp;
 use std::convert::TryFrom;
 use std::vec::Vec;
-use wasmparser::{FuncValidator, MemoryImmediate, Operator, WasmModuleResources};
+use wasmparser::{FuncValidator, MemoryImmediate, Operator, WasmModuleResources, ValType};
 
 // Clippy warns about "align: _" but its important to document that the flags field is ignored
 #[cfg_attr(
@@ -109,6 +109,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
     builder: &mut FunctionBuilder,
     state: &mut FuncTranslationState,
     environ: &mut FE,
+    ty: Option<ValType>,
 ) -> WasmResult<()> {
     if !state.reachable {
         translate_unreachable_operator(validator, &op, builder, state, environ)?;
@@ -2037,9 +2038,15 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.push1(r);
         }
         Operator::CallRef => {
+            // Get function signature
+            let index = match ty {
+                None => panic!("expected Some val type"),
+                Some(wasmparser::ValType::Ref(wasmparser::RefType { heap_type: wasmparser::HeapType::Index(type_idx), .. })) => type_idx,
+                _    => panic!("unexpected val type"),
+            };
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.
-            let (sigref, num_args) = state.get_indirect_sig(builder.func, *index, environ)?;
+            let (sigref, num_args) = state.get_indirect_sig(builder.func, index, environ)?;
             //let table = state.get_or_create_table(builder.func, *table_index, environ)?;
             let callee = state.pop1();
 
@@ -2047,58 +2054,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let args = state.peekn_mut(num_args);
             bitcast_wasm_params(environ, sigref, args, builder);
 
-            // let call = environ.translate_call_indirect(
-            //     builder,
-            //     TableIndex::from_u32(*table_index),
-            //     table,
-            //     TypeIndex::from_u32(*index),
-            //     sigref,
-            //     callee,
-            //     state.peekn(num_args),
-            // )?;
-
-            // Check for whether the table element is null, and trap if so.
-            builder
-                .ins()
-                .trapz(anyfunc_ptr, ir::TrapCode::IndirectCallToNull);
-
-            // Dereference anyfunc pointer to get the function address.
-            let mem_flags = ir::MemFlags::trusted();
-            let func_addr = builder.ins().load(
-                pointer_type,
-                mem_flags,
-                anyfunc_ptr,
-                i32::from(self.offsets.ptr.vmcaller_checked_anyfunc_func_ptr()),
-            );
-
-            let mut real_call_args = Vec::with_capacity(call_args.len() + 2);
-            let caller_vmctx = builder
-                .func
-                .special_param(ArgumentPurpose::VMContext)
-                .unwrap();
-
-            // First append the callee vmctx address.
-            let vmctx = builder.ins().load(
-                pointer_type,
-                mem_flags,
-                anyfunc_ptr,
-                i32::from(self.offsets.ptr.vmcaller_checked_anyfunc_vmctx()),
-            );
-            real_call_args.push(vmctx);
-            real_call_args.push(caller_vmctx);
-
-            // Then append the regular call arguments.
-            real_call_args.extend_from_slice(call_args);
-
-            let call = builder
-                .ins()
-                .call_indirect(sig_ref, func_addr, &real_call_args);
+            let call = environ.translate_call_ref(builder, sigref, callee, state.peekn(num_args))?;
 
             let inst_results = builder.inst_results(call);
             debug_assert_eq!(
                 inst_results.len(),
                 builder.func.dfg.signatures[sigref].returns.len(),
-                "translate_call_indirect results should match the call signature"
+                "translate_call_ref results should match the call signature"
             );
             state.popn(num_args);
             state.pushn(inst_results);
