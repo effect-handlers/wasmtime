@@ -561,6 +561,7 @@ mod test {
             threads,
             multi_memory,
             memory64,
+            function_references,
         } = options.wasm_features.unwrap();
 
         assert_eq!(reference_types, Some(true));
@@ -570,6 +571,7 @@ mod test {
         assert_eq!(threads, Some(true));
         assert_eq!(multi_memory, Some(true));
         assert_eq!(memory64, Some(true));
+        assert_eq!(function_references, Some(true));
 
         Ok(())
     }
@@ -586,6 +588,7 @@ mod test {
             threads,
             multi_memory,
             memory64,
+            function_references,
         } = options.wasm_features.unwrap();
 
         assert_eq!(reference_types, Some(false));
@@ -595,6 +598,7 @@ mod test {
         assert_eq!(threads, Some(false));
         assert_eq!(multi_memory, Some(false));
         assert_eq!(memory64, Some(false));
+        assert_eq!(function_references, Some(false));
 
         Ok(())
     }
@@ -614,6 +618,7 @@ mod test {
             threads,
             multi_memory,
             memory64,
+            function_references,
         } = options.wasm_features.unwrap();
 
         assert_eq!(reference_types, Some(false));
@@ -623,6 +628,7 @@ mod test {
         assert_eq!(threads, None);
         assert_eq!(multi_memory, Some(true));
         assert_eq!(memory64, Some(true));
+        assert_eq!(function_references, None);
 
         Ok(())
     }
