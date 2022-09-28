@@ -470,6 +470,7 @@ impl From<wasmparser::TagType> for Tag {
             wasmparser::TagKind::Exception => Tag {
                 ty: TypeIndex::from_u32(ty.func_type_idx),
             },
+            wasmparser::TagKind::Control => todo!("Implement From for Control Tag"),
         }
     }
 }

@@ -2076,6 +2076,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             builder.ins().trapnz(is_null, ir::TrapCode::NullReference);
             state.push1(r);
         }
+        Operator::ContNew { type_index: _ } | Operator::ContBind { type_index: _  } | Operator::Resume { table: _ } | Operator::ResumeThrow { tag_index: _ } | Operator::Suspend { tag_index: _ } | Operator::Barrier { ty: _ } => todo!("Implement continuation instructions"),
     };
     Ok(())
 }
