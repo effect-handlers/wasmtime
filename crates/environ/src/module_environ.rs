@@ -218,7 +218,8 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     match ty? {
                         Type::Func(wasm_func_ty) => {
                             self.declare_type_func(wasm_func_ty.try_into()?)?;
-                        }
+                        },
+                        Type::Cont(_) => todo!("Store continuation type"),
                     }
                 }
             }
