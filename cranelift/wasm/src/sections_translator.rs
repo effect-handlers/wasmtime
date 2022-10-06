@@ -42,7 +42,6 @@ fn tag(e: TagType) -> Tag {
         wasmparser::TagKind::Exception => Tag {
             ty: TypeIndex::from_u32(e.func_type_idx),
         },
-        wasmparser::TagKind::Control => todo!("Handle Control Tag in tag"),
     }
 }
 

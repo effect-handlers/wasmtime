@@ -94,7 +94,7 @@ use smallvec::SmallVec;
 use std::cmp;
 use std::convert::TryFrom;
 use std::vec::Vec;
-use wasmparser::{FuncValidator, MemoryImmediate, Operator, WasmModuleResources};
+use wasmparser::{FuncValidator, MemoryImmediate, Operator, WasmModuleResources, ValType};
 
 // Clippy warns about "align: _" but its important to document that the flags field is ignored
 #[cfg_attr(
@@ -109,6 +109,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
     builder: &mut FunctionBuilder,
     state: &mut FuncTranslationState,
     environ: &mut FE,
+    ty: Option<ValType>,
 ) -> WasmResult<()> {
     if !state.reachable {
         translate_unreachable_operator(validator, &op, builder, state, environ)?;
@@ -2022,7 +2023,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
         // TODO(dhil) fixme: merge into the above list.
         // Function references instructions
-        Operator::BrOnNonNull { .. } | Operator::ReturnCallRef { .. } => {
+        Operator::BrOnNonNull { .. } | Operator::ReturnCallRef => {
             todo!("Implement Operator::[BrOnNull,BrOnNonNull,CallRef] for translate_operator")
         } // TODO(dhil) fixme
         Operator::BrOnNull { relative_depth } => {
@@ -2036,16 +2037,16 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             builder.switch_to_block(next_block);
             state.push1(r);
         }
-        Operator::CallRef { ty } => {
+        Operator::CallRef => {
             // Get function signature
             let index = match ty {
-                wasmparser::HeapType::Index(type_idx) => type_idx,
-                _  => panic!("unexpected heap type"),
+                None => panic!("expected Some val type"),
+                Some(wasmparser::ValType::Ref(wasmparser::RefType { heap_type: wasmparser::HeapType::Index(type_idx), .. })) => type_idx,
+                _    => panic!("unexpected val type"),
             };
-
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.
-            let (sigref, num_args) = state.get_indirect_sig(builder.func, *index, environ)?;
+            let (sigref, num_args) = state.get_indirect_sig(builder.func, index, environ)?;
             //let table = state.get_or_create_table(builder.func, *table_index, environ)?;
             let callee = state.pop1();
 

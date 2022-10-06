@@ -3296,7 +3296,7 @@ dependencies = [
 [[package]]
 name = "wasmparser"
 version = "0.88.0"
-source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-conts#ba7af058cc4975b9f13060d3ece91aaa9c46dbcc"
+source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-conts#d5e2744600ef9b7e349e85017106a0e8ca63c356"
 dependencies = [
  "indexmap",
 ]
