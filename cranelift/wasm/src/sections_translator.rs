@@ -78,7 +78,8 @@ pub fn parse_type_section<'a>(
                 module_translation_state
                     .wasm_types
                     .push((wasm_func_ty.params, wasm_func_ty.returns));
-            }
+            },
+            Type::Cont(_) => todo!("Implement Type::Cont in parse_type_section"),
         }
     }
     Ok(())
