@@ -1272,7 +1272,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         Ok(match ht {
             WasmHeapType::Func => pos.ins().iconst(self.pointer_type(), 0),
             WasmHeapType::Extern => pos.ins().null(self.reference_type(ht)),
-            WasmHeapType::Index(_) => pos.ins().null(self.reference_type(ht)),
+            WasmHeapType::Index(_) => pos.ins().iconst(self.pointer_type(), 0),
             WasmHeapType::Bot => panic!("goes away in refactor"),
         })
     }
