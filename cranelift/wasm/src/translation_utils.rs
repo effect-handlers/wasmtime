@@ -58,16 +58,6 @@ pub fn tabletype_to_type<PE: TargetEnvironment + ?Sized>(
     }
 }
 
-/// TODO(dhil): Temporary workaround, should be available from wasmparser/readers/core/types.rs
-const FUNC_REF: wasmparser::RefType = wasmparser::RefType {
-    nullable: true,
-    heap_type: wasmparser::HeapType::Func,
-};
-const EXTERN_REF: wasmparser::RefType = wasmparser::RefType {
-    nullable: true,
-    heap_type: wasmparser::HeapType::Extern,
-};
-
 /// Get the parameter and result types for the given Wasm blocktype.
 pub fn blocktype_params_results<'a, T>(
     validator: &'a FuncValidator<T>,
