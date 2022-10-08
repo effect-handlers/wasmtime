@@ -94,7 +94,7 @@ use smallvec::SmallVec;
 use std::cmp;
 use std::convert::TryFrom;
 use std::vec::Vec;
-use wasmparser::{FuncValidator, MemoryImmediate, Operator, WasmModuleResources, ValType};
+use wasmparser::{FuncValidator, MemoryImmediate, Operator, ValType, WasmModuleResources};
 
 // Clippy warns about "align: _" but its important to document that the flags field is ignored
 #[cfg_attr(
@@ -2041,8 +2041,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // Get function signature
             let index = match ty {
                 None => panic!("expected Some val type"),
-                Some(wasmparser::ValType::Ref(wasmparser::RefType { heap_type: wasmparser::HeapType::Index(type_idx), .. })) => type_idx,
-                _    => panic!("unexpected val type"),
+                Some(wasmparser::ValType::Ref(wasmparser::RefType {
+                    heap_type: wasmparser::HeapType::Index(type_idx),
+                    ..
+                })) => type_idx,
+                _ => panic!("unexpected val type"),
             };
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.
@@ -2054,7 +2057,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let args = state.peekn_mut(num_args);
             bitcast_wasm_params(environ, sigref, args, builder);
 
-            let call = environ.translate_call_ref(builder, sigref, callee, state.peekn(num_args))?;
+            let call =
+                environ.translate_call_ref(builder, sigref, callee, state.peekn(num_args))?;
 
             let inst_results = builder.inst_results(call);
             debug_assert_eq!(
