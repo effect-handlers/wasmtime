@@ -1,6 +1,6 @@
 use crate::r#ref::ExternRef;
 use crate::store::StoreOpaque;
-use crate::{AsContextMut, Func, ValType, RefType, HeapType};
+use crate::{AsContextMut, Func, HeapType, RefType, ValType};
 use anyhow::{bail, Result};
 use std::ptr;
 use wasmtime_runtime::TableElement;
@@ -89,8 +89,14 @@ impl Val {
             Val::I64(_) => ValType::I64,
             Val::F32(_) => ValType::F32,
             Val::F64(_) => ValType::F64,
-            Val::ExternRef(_) => ValType::Ref(RefType { nullable: true, heap_type: HeapType::Extern }),
-            Val::FuncRef(_) => ValType::Ref(RefType { nullable: true, heap_type: HeapType::Func }),
+            Val::ExternRef(_) => ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::Extern,
+            }),
+            Val::FuncRef(_) => ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::Func,
+            }),
             Val::V128(_) => ValType::V128,
         }
     }
@@ -143,9 +149,10 @@ impl Val {
                 match rt.heap_type {
                     HeapType::Extern => Val::ExternRef(ExternRef::from_raw(raw.get_externref())),
                     HeapType::Func => Val::FuncRef(Func::from_raw(store, raw.get_funcref())),
-                    _ => todo!("Implement HeapType::Bot/Index for from_raw"), // TODO(dhil) fixme
+                    HeapType::Index(_) => Val::FuncRef(Func::from_raw(store, raw.get_funcref())), // TODO(dhil) fixme
+                    HeapType::Bot => panic!("no bot"),
                 }
-            },
+            }
             ValType::Bot => todo!("Implement ValType::Bot for from_raw"), // TODO(dhil) fixme: I think this one is trivial.
         }
     }
@@ -196,7 +203,13 @@ impl Val {
         ty: RefType,
     ) -> Result<TableElement> {
         match (self, ty) {
-            (Val::FuncRef(Some(f)), RefType { heap_type: HeapType::Func, .. }) => {
+            (
+                Val::FuncRef(Some(f)),
+                RefType {
+                    heap_type: HeapType::Func,
+                    ..
+                },
+            ) => {
                 if !f.comes_from_same_store(store) {
                     bail!("cross-`Store` values are not supported in tables");
                 }
@@ -204,11 +217,27 @@ impl Val {
                     f.caller_checked_anyfunc(store).as_ptr(),
                 ))
             }
-            (Val::FuncRef(None), RefType { heap_type: HeapType::Func, .. }) => Ok(TableElement::FuncRef(ptr::null_mut())),
-            (Val::ExternRef(Some(x)), RefType { heap_type: HeapType::Extern, .. }) => {
-                Ok(TableElement::ExternRef(Some(x.inner)))
-            }
-            (Val::ExternRef(None), RefType { heap_type: HeapType::Extern, .. }) => Ok(TableElement::ExternRef(None)),
+            (
+                Val::FuncRef(None),
+                RefType {
+                    heap_type: HeapType::Func,
+                    ..
+                },
+            ) => Ok(TableElement::FuncRef(ptr::null_mut())),
+            (
+                Val::ExternRef(Some(x)),
+                RefType {
+                    heap_type: HeapType::Extern,
+                    ..
+                },
+            ) => Ok(TableElement::ExternRef(Some(x.inner))),
+            (
+                Val::ExternRef(None),
+                RefType {
+                    heap_type: HeapType::Extern,
+                    ..
+                },
+            ) => Ok(TableElement::ExternRef(None)),
             _ => bail!("value does not match table element type"),
         }
     }
