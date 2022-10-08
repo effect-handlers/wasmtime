@@ -2029,7 +2029,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::BrOnNull { relative_depth } => {
             let r = state.pop1();
             let (br_destination, inputs) = translate_br_if_args(*relative_depth, state);
-            canonicalise_then_brz(builder, r, br_destination, inputs);
+            let is_null = environ.translate_ref_is_null(builder.cursor(), r)?;
+            canonicalise_then_brnz(builder, is_null, br_destination, inputs);
 
             let next_block = builder.create_block();
             canonicalise_then_jump(builder, next_block, &[]);
