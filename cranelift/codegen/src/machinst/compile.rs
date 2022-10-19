@@ -13,15 +13,19 @@ use regalloc2::{self, MachineEnv};
 /// for binary emission.
 pub fn compile<B: LowerBackend + TargetIsa>(
     f: &Function,
+    flags: crate::settings::Flags,
     b: &B,
-    abi: Box<dyn ABICallee<I = B::MInst>>,
+    abi: Callee<<<B as LowerBackend>::MInst as MachInst>::ABIMachineSpec>,
     machine_env: &MachineEnv,
     emit_info: <B::MInst as MachInstEmit>::Info,
+    sigs: SigSet,
 ) -> CodegenResult<(VCode<B::MInst>, regalloc2::Output)> {
     // Compute lowered block order.
     let block_order = BlockLoweringOrder::new(f);
+
     // Build the lowering context.
-    let lower = Lower::new(f, abi, emit_info, block_order)?;
+    let lower = crate::machinst::Lower::new(f, flags, abi, emit_info, block_order, sigs)?;
+
     // Lower the IR.
     let vcode = {
         let _tt = timing::vcode_lower();

@@ -1,6 +1,6 @@
 //! Implementation of a standard S390x ABI.
 //!
-//! This machine uses the "vanilla" ABI implementation from abi_impl.rs,
+//! This machine uses the "vanilla" ABI implementation from abi.rs,
 //! however a few details are different from the description there:
 //!
 //! - On s390x, the caller must provide a "register save area" of 160
@@ -87,14 +87,13 @@ use std::convert::TryFrom;
 // We use a generic implementation that factors out ABI commonalities.
 
 /// Support for the S390x ABI from the callee side (within a function body).
-pub type S390xABICallee = ABICalleeImpl<S390xMachineDeps>;
+pub type S390xCallee = Callee<S390xMachineDeps>;
 
 /// ABI Register usage
 
 fn in_int_reg(ty: Type) -> bool {
     match ty {
         types::I8 | types::I16 | types::I32 | types::I64 | types::R64 => true,
-        types::B1 | types::B8 | types::B16 | types::B32 | types::B64 => true,
         _ => false,
     }
 }
@@ -248,20 +247,6 @@ impl ABIMachineSpec for S390xMachineDeps {
 
         for i in 0..params.len() {
             let mut param = params[i];
-
-            // Validate "purpose".
-            match &param.purpose {
-                &ir::ArgumentPurpose::VMContext
-                | &ir::ArgumentPurpose::Normal
-                | &ir::ArgumentPurpose::StackLimit
-                | &ir::ArgumentPurpose::SignatureId
-                | &ir::ArgumentPurpose::StructReturn
-                | &ir::ArgumentPurpose::StructArgument(_) => {}
-                _ => panic!(
-                    "Unsupported argument purpose {:?} in signature: {:?}",
-                    param.purpose, params
-                ),
-            }
 
             let intreg = in_int_reg(param.value_type);
             let fltreg = in_flt_reg(param.value_type);
@@ -473,6 +458,10 @@ impl ABIMachineSpec for S390xMachineDeps {
         }
     }
 
+    fn gen_args(_isa_flags: &s390x_settings::Flags, args: Vec<ArgPair>) -> Inst {
+        Inst::Args { args }
+    }
+
     fn gen_ret(_setup_frame: bool, _isa_flags: &s390x_settings::Flags, rets: Vec<Reg>) -> Inst {
         Inst::Ret {
             link: gpr(14),
@@ -509,6 +498,7 @@ impl ABIMachineSpec for S390xMachineDeps {
             insts.push(Inst::AluRUImm32 {
                 alu_op: ALUOp::AddLogical64,
                 rd: into_reg,
+                ri: into_reg.to_reg(),
                 imm,
             });
         }
@@ -556,12 +546,14 @@ impl ABIMachineSpec for S390xMachineDeps {
             insts.push(Inst::AluRSImm16 {
                 alu_op: ALUOp::Add64,
                 rd: writable_stack_reg(),
+                ri: stack_reg(),
                 imm,
             });
         } else {
             insts.push(Inst::AluRSImm32 {
                 alu_op: ALUOp::Add64,
                 rd: writable_stack_reg(),
+                ri: stack_reg(),
                 imm,
             });
         }
@@ -588,8 +580,12 @@ impl ABIMachineSpec for S390xMachineDeps {
         smallvec![]
     }
 
+    fn gen_inline_probestack(_frame_size: u32, _guard_size: u32) -> SmallInstVec<Self::I> {
+        unimplemented!("Inline stack probing is unimplemented on S390x");
+    }
+
     // Returns stack bytes used as well as instructions. Does not adjust
-    // nominal SP offset; abi_impl generic code will do that.
+    // nominal SP offset; abi generic code will do that.
     fn gen_clobber_save(
         _call_conv: isa::CallConv,
         _setup_frame: bool,
@@ -746,8 +742,8 @@ impl ABIMachineSpec for S390xMachineDeps {
 
     fn gen_call(
         _dest: &CallDest,
-        _uses: SmallVec<[Reg; 8]>,
-        _defs: SmallVec<[Writable<Reg>; 8]>,
+        _uses: CallArgList,
+        _defs: CallRetList,
         _clobbers: PRegSet,
         _opcode: ir::Opcode,
         _tmp: Writable<Reg>,
@@ -761,6 +757,8 @@ impl ABIMachineSpec for S390xMachineDeps {
         _call_conv: isa::CallConv,
         _dst: Reg,
         _src: Reg,
+        _tmp1: Writable<Reg>,
+        _tmp2: Writable<Reg>,
         _size: usize,
     ) -> SmallVec<[Self::I; 8]> {
         unimplemented!("StructArgs not implemented for S390X yet");

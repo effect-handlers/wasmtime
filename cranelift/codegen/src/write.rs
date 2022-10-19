@@ -7,7 +7,7 @@ use crate::entity::SecondaryMap;
 use crate::ir::entities::AnyEntity;
 use crate::ir::{Block, DataFlowGraph, Function, Inst, SigRef, Type, Value, ValueDef};
 use crate::packed_option::ReservedValue;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt::{self, Write};
 
@@ -80,7 +80,12 @@ pub trait FuncWriter {
         for (fnref, ext_func) in &func.dfg.ext_funcs {
             if ext_func.signature != SigRef::reserved_value() {
                 any = true;
-                self.write_entity_definition(w, func, fnref.into(), ext_func)?;
+                self.write_entity_definition(
+                    w,
+                    func,
+                    fnref.into(),
+                    &ext_func.display(Some(&func.params)),
+                )?;
             }
         }
 
@@ -254,7 +259,7 @@ fn decorate_block<FW: FuncWriter>(
     block: Block,
 ) -> fmt::Result {
     // Indent all instructions if any srclocs are present.
-    let indent = if func.srclocs.is_empty() { 4 } else { 36 };
+    let indent = if func.rel_srclocs().is_empty() { 4 } else { 36 };
 
     func_w.write_block_header(w, func, block, indent)?;
     for a in func.dfg.block_params(block).iter().cloned() {
@@ -335,7 +340,7 @@ fn write_instruction(
     let mut s = String::with_capacity(16);
 
     // Source location goes first.
-    let srcloc = func.srclocs[inst];
+    let srcloc = func.srcloc(inst);
     if !srcloc.is_default() {
         write!(s, "{} ", srcloc)?;
     }
@@ -388,7 +393,6 @@ pub fn write_operands(w: &mut dyn Write, dfg: &DataFlowGraph, inst: Inst) -> fmt
         UnaryImm { imm, .. } => write!(w, " {}", imm),
         UnaryIeee32 { imm, .. } => write!(w, " {}", imm),
         UnaryIeee64 { imm, .. } => write!(w, " {}", imm),
-        UnaryBool { imm, .. } => write!(w, " {}", imm),
         UnaryGlobalValue { global_value, .. } => write!(w, " {}", global_value),
         UnaryConst {
             constant_handle, ..
@@ -525,7 +529,25 @@ pub fn write_operands(w: &mut dyn Write, dfg: &DataFlowGraph, inst: Inst) -> fmt
         FloatCondTrap {
             cond, arg, code, ..
         } => write!(w, " {} {}, {}", cond, arg, code),
+    }?;
+
+    let mut sep = "  ; ";
+    for &arg in dfg.inst_args(inst) {
+        if let ValueDef::Result(src, _) = dfg.value_def(arg) {
+            let imm = match dfg[src] {
+                UnaryImm { imm, .. } => imm.to_string(),
+                UnaryIeee32 { imm, .. } => imm.to_string(),
+                UnaryIeee64 { imm, .. } => imm.to_string(),
+                UnaryConst {
+                    constant_handle, ..
+                } => constant_handle.to_string(),
+                _ => continue,
+            };
+            write!(w, "{}{} = {}", sep, arg, imm)?;
+            sep = ", ";
+        }
     }
+    Ok(())
 }
 
 /// Write block args using optional parantheses.
@@ -572,7 +594,7 @@ impl<'a> fmt::Display for DisplayValuesWithDelimiter<'a> {
 mod tests {
     use crate::cursor::{Cursor, CursorPosition, FuncCursor};
     use crate::ir::types;
-    use crate::ir::{ExternalName, Function, InstBuilder, StackSlotData, StackSlotKind};
+    use crate::ir::{Function, InstBuilder, StackSlotData, StackSlotKind, UserFuncName};
     use alloc::string::ToString;
 
     #[test]
@@ -580,7 +602,7 @@ mod tests {
         let mut f = Function::new();
         assert_eq!(f.to_string(), "function u0:0() fast {\n}\n");
 
-        f.name = ExternalName::testcase("foo");
+        f.name = UserFuncName::testcase("foo");
         assert_eq!(f.to_string(), "function %foo() fast {\n}\n");
 
         f.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 4));

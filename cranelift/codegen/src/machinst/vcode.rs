@@ -19,9 +19,8 @@
 
 use crate::fx::FxHashMap;
 use crate::fx::FxHashSet;
-use crate::ir::{
-    self, types, Constant, ConstantData, DynamicStackSlot, LabelValueLoc, SourceLoc, ValueLabel,
-};
+use crate::ir::RelSourceLoc;
+use crate::ir::{self, types, Constant, ConstantData, DynamicStackSlot, LabelValueLoc, ValueLabel};
 use crate::machinst::*;
 use crate::timing;
 use crate::trace;
@@ -31,7 +30,6 @@ use regalloc2::{
     RegClass, VReg,
 };
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use cranelift_entity::{entity_impl, Keys, PrimaryMap};
 use std::collections::hash_map::Entry;
@@ -90,7 +88,7 @@ pub struct VCode<I: VCodeInst> {
 
     /// Source locations for each instruction. (`SourceLoc` is a `u32`, so it is
     /// reasonable to keep one of these per instruction.)
-    srclocs: Vec<SourceLoc>,
+    srclocs: Vec<RelSourceLoc>,
 
     /// Entry block.
     entry: BlockIndex,
@@ -160,7 +158,7 @@ pub struct VCode<I: VCodeInst> {
     block_order: BlockLoweringOrder,
 
     /// ABI object.
-    abi: Box<dyn ABICallee<I = I>>,
+    pub(crate) abi: Callee<I::ABIMachineSpec>,
 
     /// Constant information used during code emission. This should be
     /// immutable across function compilations within the same module.
@@ -180,6 +178,8 @@ pub struct VCode<I: VCodeInst> {
 
     /// Value labels for debuginfo attached to vregs.
     debug_value_labels: Vec<(VReg, InsnIndex, InsnIndex, u32)>,
+
+    pub(crate) sigs: SigSet,
 }
 
 /// The result of `VCode::emit`. Contains all information computed
@@ -221,6 +221,9 @@ pub struct EmitResult<I: VCodeInst> {
 
     /// Stack frame size.
     pub frame_size: u32,
+
+    /// The alignment requirement for pc-relative loads.
+    pub alignment: u32,
 }
 
 /// A builder for a VCode function body.
@@ -241,7 +244,7 @@ pub struct EmitResult<I: VCodeInst> {
 /// terminator instructions with successor blocks.)
 pub struct VCodeBuilder<I: VCodeInst> {
     /// In-progress VCode.
-    vcode: VCode<I>,
+    pub(crate) vcode: VCode<I>,
 
     /// In what direction is the build occuring?
     direction: VCodeBuildDirection,
@@ -261,7 +264,7 @@ pub struct VCodeBuilder<I: VCodeInst> {
     branch_block_arg_succ_start: usize,
 
     /// Current source location.
-    cur_srcloc: SourceLoc,
+    cur_srcloc: RelSourceLoc,
 
     /// Debug-value label in-progress map, keyed by label. For each
     /// label, we keep disjoint ranges mapping to vregs. We'll flatten
@@ -281,13 +284,14 @@ pub enum VCodeBuildDirection {
 impl<I: VCodeInst> VCodeBuilder<I> {
     /// Create a new VCodeBuilder.
     pub fn new(
-        abi: Box<dyn ABICallee<I = I>>,
+        sigs: SigSet,
+        abi: Callee<I::ABIMachineSpec>,
         emit_info: I::Info,
         block_order: BlockLoweringOrder,
         constants: VCodeConstants,
         direction: VCodeBuildDirection,
     ) -> VCodeBuilder<I> {
-        let vcode = VCode::new(abi, emit_info, block_order, constants);
+        let vcode = VCode::new(sigs, abi, emit_info, block_order, constants);
 
         VCodeBuilder {
             vcode,
@@ -296,14 +300,31 @@ impl<I: VCodeInst> VCodeBuilder<I> {
             succ_start: 0,
             block_params_start: 0,
             branch_block_arg_succ_start: 0,
-            cur_srcloc: SourceLoc::default(),
+            cur_srcloc: Default::default(),
             debug_info: FxHashMap::default(),
         }
     }
 
+    pub fn init_abi(&mut self, temps: Vec<Writable<Reg>>) {
+        self.vcode.abi.init(&self.vcode.sigs, temps);
+    }
+
     /// Access the ABI object.
-    pub fn abi(&mut self) -> &mut dyn ABICallee<I = I> {
-        &mut *self.vcode.abi
+    pub fn abi(&self) -> &Callee<I::ABIMachineSpec> {
+        &self.vcode.abi
+    }
+
+    /// Access the ABI object.
+    pub fn abi_mut(&mut self) -> &mut Callee<I::ABIMachineSpec> {
+        &mut self.vcode.abi
+    }
+
+    pub fn sigs(&self) -> &SigSet {
+        &self.vcode.sigs
+    }
+
+    pub fn sigs_mut(&mut self) -> &mut SigSet {
+        &mut self.vcode.sigs
     }
 
     /// Access to the BlockLoweringOrder object.
@@ -399,7 +420,7 @@ impl<I: VCodeInst> VCodeBuilder<I> {
     }
 
     /// Set the current source location.
-    pub fn set_srcloc(&mut self, srcloc: SourceLoc) {
+    pub fn set_srcloc(&mut self, srcloc: RelSourceLoc) {
         self.cur_srcloc = srcloc;
     }
 
@@ -627,13 +648,15 @@ fn is_reftype(ty: Type) -> bool {
 impl<I: VCodeInst> VCode<I> {
     /// New empty VCode.
     fn new(
-        abi: Box<dyn ABICallee<I = I>>,
+        sigs: SigSet,
+        abi: Callee<I::ABIMachineSpec>,
         emit_info: I::Info,
         block_order: BlockLoweringOrder,
         constants: VCodeConstants,
     ) -> VCode<I> {
         let n_blocks = block_order.lowered_order().len();
         VCode {
+            sigs,
             vreg_types: vec![],
             have_ref_values: false,
             insts: Vec::with_capacity(10 * n_blocks),
@@ -750,7 +773,7 @@ impl<I: VCodeInst> VCode<I> {
         want_metadata: bool,
     ) -> EmitResult<I>
     where
-        I: MachInstEmit,
+        I: VCodeInst,
     {
         // To write into disasm string.
         use core::fmt::Write;
@@ -792,13 +815,13 @@ impl<I: VCodeInst> VCode<I> {
         // We need to generate the prologue in order to get the ABI
         // object into the right state first. We'll emit it when we
         // hit the right block below.
-        let prologue_insts = self.abi.gen_prologue();
+        let prologue_insts = self.abi.gen_prologue(&self.sigs);
 
         // Emit blocks.
         let mut cur_srcloc = None;
         let mut last_offset = None;
         let mut inst_offsets = vec![];
-        let mut state = I::State::new(&*self.abi);
+        let mut state = I::State::new(&self.abi);
 
         let mut disasm = String::new();
 
@@ -806,7 +829,25 @@ impl<I: VCodeInst> VCode<I> {
             inst_offsets.resize(self.insts.len(), 0);
         }
 
-        for block in final_order {
+        // Count edits per block ahead of time; this is needed for
+        // lookahead island emission. (We could derive it per-block
+        // with binary search in the edit list, but it's more
+        // efficient to do it in one pass here.)
+        let mut ra_edits_per_block: SmallVec<[u32; 64]> = smallvec![];
+        let mut edit_idx = 0;
+        for block in 0..self.num_blocks() {
+            let end_inst = self.block_ranges[block].1;
+            let start_edit_idx = edit_idx;
+            while edit_idx < regalloc.edits.len() && regalloc.edits[edit_idx].0.inst() < end_inst {
+                edit_idx += 1;
+            }
+            let end_edit_idx = edit_idx;
+            ra_edits_per_block.push((end_edit_idx - start_edit_idx) as u32);
+        }
+
+        let is_forward_edge_cfi_enabled = self.abi.is_forward_edge_cfi_enabled();
+
+        for (block_order_idx, &block) in final_order.iter().enumerate() {
             trace!("emitting block {:?}", block);
             let new_offset = I::align_basic_block(buffer.cur_offset());
             while new_offset > buffer.cur_offset() {
@@ -821,7 +862,7 @@ impl<I: VCodeInst> VCode<I> {
                            disasm: &mut String,
                            buffer: &mut MachBuffer<I>,
                            state: &mut I::State| {
-                if want_disasm {
+                if want_disasm && !inst.is_args() {
                     let mut s = state.clone();
                     writeln!(disasm, "  {}", inst.pretty_print_inst(allocs, &mut s)).unwrap();
                 }
@@ -831,8 +872,8 @@ impl<I: VCodeInst> VCode<I> {
             // Is this the first block? Emit the prologue directly if so.
             if block == self.entry {
                 trace!(" -> entry block");
-                buffer.start_srcloc(SourceLoc::default());
-                state.pre_sourceloc(SourceLoc::default());
+                buffer.start_srcloc(Default::default());
+                state.pre_sourceloc(Default::default());
                 for inst in &prologue_insts {
                     do_emit(&inst, &[], &mut disasm, &mut buffer, &mut state);
                 }
@@ -861,6 +902,13 @@ impl<I: VCodeInst> VCode<I> {
                 }
                 bb_starts.push(Some(cur_offset));
                 last_offset = Some(cur_offset);
+            }
+
+            if let Some(block_start) = I::gen_block_start(
+                self.block_order.is_indirect_branch_target(block),
+                is_forward_edge_cfi_enabled,
+            ) {
+                do_emit(&block_start, &[], &mut disasm, &mut buffer, &mut state);
             }
 
             for inst_or_edit in regalloc.block_insts_and_edits(&self, block) {
@@ -903,7 +951,7 @@ impl<I: VCodeInst> VCode<I> {
                             buffer.start_srcloc(srcloc);
                             cur_srcloc = Some(srcloc);
                         }
-                        state.pre_sourceloc(cur_srcloc.unwrap_or(SourceLoc::default()));
+                        state.pre_sourceloc(cur_srcloc.unwrap_or_default());
 
                         // If this is a safepoint, compute a stack map
                         // and pass it to the emit state.
@@ -979,7 +1027,6 @@ impl<I: VCodeInst> VCode<I> {
                                 // Spill from register to spillslot.
                                 let to = to.as_stack().unwrap();
                                 let from_rreg = RealReg::from(from);
-                                debug_assert_eq!(from.class(), to.class());
                                 let spill = self.abi.gen_spill(to, from_rreg);
                                 do_emit(&spill, &[], &mut disasm, &mut buffer, &mut state);
                             }
@@ -987,7 +1034,6 @@ impl<I: VCodeInst> VCode<I> {
                                 // Load from spillslot to register.
                                 let from = from.as_stack().unwrap();
                                 let to_rreg = Writable::from_reg(RealReg::from(to));
-                                debug_assert_eq!(from.class(), to.class());
                                 let reload = self.abi.gen_reload(to_rreg, from);
                                 do_emit(&reload, &[], &mut disasm, &mut buffer, &mut state);
                             }
@@ -1007,11 +1053,14 @@ impl<I: VCodeInst> VCode<I> {
             // Do we need an island? Get the worst-case size of the
             // next BB and see if, having emitted that many bytes, we
             // will be beyond the deadline.
-            if block.index() < (self.num_blocks() - 1) {
-                let next_block = block.index() + 1;
-                let next_block_range = self.block_ranges[next_block];
-                let next_block_size = next_block_range.1.index() - next_block_range.0.index();
-                let worst_case_next_bb = I::worst_case_size() * next_block_size as u32;
+            if block_order_idx < final_order.len() - 1 {
+                let next_block = final_order[block_order_idx + 1];
+                let next_block_range = self.block_ranges[next_block.index()];
+                let next_block_size =
+                    (next_block_range.1.index() - next_block_range.0.index()) as u32;
+                let next_block_ra_insertions = ra_edits_per_block[next_block.index()];
+                let worst_case_next_bb =
+                    I::worst_case_size() * (next_block_size + next_block_ra_insertions);
                 if buffer.island_needed(worst_case_next_bb) {
                     buffer.emit_island(worst_case_next_bb);
                 }
@@ -1019,7 +1068,10 @@ impl<I: VCodeInst> VCode<I> {
         }
 
         // Emit the constants used by the function.
+        let mut alignment = 1;
         for (constant, data) in self.constants.iter() {
+            alignment = data.alignment().max(alignment);
+
             let label = buffer.get_label_for_constant(constant);
             buffer.defer_constant(label, data.alignment(), data.as_slice(), u32::max_value());
         }
@@ -1062,6 +1114,7 @@ impl<I: VCodeInst> VCode<I> {
             dynamic_stackslot_offsets: self.abi.dynamic_stackslot_offsets().clone(),
             value_labels_ranges,
             frame_size,
+            alignment,
         }
     }
 

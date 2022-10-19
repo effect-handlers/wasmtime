@@ -14,6 +14,8 @@ use wasmtime_environ::Tunables;
 use wasmtime_jit::{JitDumpAgent, NullProfilerAgent, ProfilingAgent, VTuneAgent};
 use wasmtime_runtime::{InstanceAllocator, OnDemandInstanceAllocator, RuntimeMemoryCreator};
 
+pub use wasmtime_environ::CacheStore;
+
 #[cfg(feature = "pooling-allocator")]
 pub use wasmtime_runtime::{InstanceLimits, PoolingAllocationStrategy};
 
@@ -98,6 +100,7 @@ pub struct Config {
     pub(crate) features: WasmFeatures,
     pub(crate) wasm_backtrace: bool,
     pub(crate) wasm_backtrace_details_env_used: bool,
+    pub(crate) native_unwind_info: bool,
     #[cfg(feature = "async")]
     pub(crate) async_stack_size: usize,
     pub(crate) async_support: bool,
@@ -107,6 +110,7 @@ pub struct Config {
     pub(crate) memory_guaranteed_dense_image_size: u64,
     pub(crate) force_memory_init_memfd: bool,
     pub(crate) function_references: bool,
+    pub(crate) async_stack_zeroing: bool,
 }
 
 /// User-provided configuration for the compiler.
@@ -117,6 +121,8 @@ struct CompilerConfig {
     target: Option<target_lexicon::Triple>,
     settings: HashMap<String, String>,
     flags: HashSet<String>,
+    #[cfg(compiler)]
+    cache_store: Option<Arc<dyn CacheStore>>,
 }
 
 #[cfg(compiler)]
@@ -127,6 +133,7 @@ impl CompilerConfig {
             target: None,
             settings: HashMap::new(),
             flags: HashSet::new(),
+            cache_store: None,
         }
     }
 
@@ -181,6 +188,7 @@ impl Config {
             max_wasm_stack: 512 * 1024,
             wasm_backtrace: true,
             wasm_backtrace_details_env_used: false,
+            native_unwind_info: true,
             features: WasmFeatures::default(),
             #[cfg(feature = "async")]
             async_stack_size: 2 << 20,
@@ -191,6 +199,7 @@ impl Config {
             memory_guaranteed_dense_image_size: 16 << 20,
             force_memory_init_memfd: false,
             function_references: false,
+            async_stack_zeroing: false,
         };
         #[cfg(compiler)]
         {
@@ -225,6 +234,17 @@ impl Config {
         self.compiler_config.target =
             Some(target_lexicon::Triple::from_str(target).map_err(|e| anyhow::anyhow!(e))?);
 
+        Ok(self)
+    }
+
+    /// Enables the incremental compilation cache in Cranelift, using the provided `CacheStore`
+    /// backend for storage.
+    #[cfg(all(feature = "incremental-cache", feature = "cranelift"))]
+    pub fn enable_incremental_compilation(
+        &mut self,
+        cache_store: Arc<dyn CacheStore>,
+    ) -> Result<&mut Self> {
+        self.compiler_config.cache_store = Some(cache_store);
         Ok(self)
     }
 
@@ -326,6 +346,35 @@ impl Config {
         self
     }
 
+    /// Configures whether or not stacks used for async futures are reset to
+    /// zero after usage.
+    ///
+    /// When the [`async_support`](Config::async_support) method is enabled for
+    /// Wasmtime and the [`call_async`] variant
+    /// of calling WebAssembly is used then Wasmtime will create a separate
+    /// runtime execution stack for each future produced by [`call_async`].
+    /// When using the pooling instance allocator
+    /// ([`InstanceAllocationStrategy::Pooling`]) this allocation will happen
+    /// from a pool of stacks and additionally deallocation will simply release
+    /// the stack back to the pool. During the deallocation process Wasmtime
+    /// won't by default reset the contents of the stack back to zero.
+    ///
+    /// When this option is enabled it can be seen as a defense-in-depth
+    /// mechanism to reset a stack back to zero. This is not required for
+    /// correctness and can be a costly operation in highly concurrent
+    /// environments due to modifications of the virtual address space requiring
+    /// process-wide synchronization.
+    ///
+    /// This option defaults to `false`.
+    ///
+    /// [`call_async`]: crate::TypedFunc::call_async
+    #[cfg(feature = "async")]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = "async")))]
+    pub fn async_stack_zeroing(&mut self, enable: bool) -> &mut Self {
+        self.async_stack_zeroing = enable;
+        self
+    }
+
     /// Configures whether DWARF debug information will be emitted during
     /// compilation.
     ///
@@ -344,6 +393,8 @@ impl Config {
     ///
     /// When disabled, wasm backtrace details are ignored, and [`crate::Trap::trace()`]
     /// will always return `None`.
+    #[deprecated = "Backtraces will always be enabled in future Wasmtime releases; if this \
+                    causes problems for you, please file an issue."]
     pub fn wasm_backtrace(&mut self, enable: bool) -> &mut Self {
         self.wasm_backtrace = enable;
         self
@@ -372,6 +423,24 @@ impl Config {
                     .unwrap_or(false)
             }
         };
+        self
+    }
+
+    /// Configures whether to generate native unwind information
+    /// (e.g. `.eh_frame` on Linux).
+    ///
+    /// This configuration option only exists to help third-party stack
+    /// capturing mechanisms, such as the system's unwinder or the `backtrace`
+    /// crate, determine how to unwind through Wasm frames. It does not affect
+    /// whether Wasmtime can capture Wasm backtraces or not, or whether
+    /// [`Trap::trace`][crate::Trap::trace] returns `Some` or `None`.
+    ///
+    /// Note that native unwind information is always generated when targeting
+    /// Windows, since the Windows ABI requires it.
+    ///
+    /// This option defaults to `true`.
+    pub fn native_unwind_info(&mut self, enable: bool) -> &mut Self {
+        self.native_unwind_info = enable;
         self
     }
 
@@ -790,6 +859,27 @@ impl Config {
         self.compiler_config
             .settings
             .insert("opt_level".to_string(), val.to_string());
+        self
+    }
+
+    /// Configures the Cranelift code generator to use its
+    /// "egraph"-based mid-end optimizer.
+    ///
+    /// This optimizer is intended to replace the compiler's more
+    /// traditional pipeline of optimization passes with a unified
+    /// code-rewriting system. It is not yet on by default, but it is
+    /// intended to become the default in a future version. It may
+    /// result in faster code, at the cost of slightly more
+    /// compilation-time work.
+    ///
+    /// The default value for this is `false`.
+    #[cfg(compiler)]
+    #[cfg_attr(nightlydoc, doc(cfg(feature = "cranelift")))] // see build.rs
+    pub fn cranelift_use_egraphs(&mut self, enable: bool) -> &mut Self {
+        let val = if enable { "true" } else { "false" };
+        self.compiler_config
+            .settings
+            .insert("use_egraphs".to_string(), val.to_string());
         self
     }
 
@@ -1403,6 +1493,7 @@ impl Config {
                 instance_limits,
                 stack_size,
                 &self.tunables,
+                self.async_stack_zeroing,
             )?)),
         }
     }
@@ -1424,6 +1515,24 @@ impl Config {
             compiler.target(target.clone())?;
         }
 
+        if self.native_unwind_info ||
+            // Windows always needs unwind info, since it is part of the ABI.
+            self
+                .compiler_config
+                .target
+                .as_ref()
+                .map_or(cfg!(target_os = "windows"), |target| {
+                    target.operating_system == target_lexicon::OperatingSystem::Windows
+                })
+        {
+            if !self
+                .compiler_config
+                .ensure_setting_unset_or_given("unwind_info", "true")
+            {
+                bail!("compiler option 'unwind_info' must be enabled profiling");
+            }
+        }
+
         // We require frame pointers for correct stack walking, which is safety
         // critical in the presence of reference types, and otherwise it is just
         // really bad developer experience to get wrong.
@@ -1432,18 +1541,6 @@ impl Config {
             .insert("preserve_frame_pointers".into(), "true".into());
 
         // check for incompatible compiler options and set required values
-        if self.wasm_backtrace || self.features.reference_types {
-            if !self
-                .compiler_config
-                .ensure_setting_unset_or_given("unwind_info", "true")
-            {
-                bail!("compiler option 'unwind_info' must be enabled when either 'backtraces' or 'reference types' are enabled");
-            }
-        } else {
-            self.compiler_config
-                .settings
-                .insert("unwind_info".to_string(), "false".to_string());
-        }
         if self.features.reference_types {
             if !self
                 .compiler_config
@@ -1469,7 +1566,20 @@ impl Config {
             compiler.enable(flag)?;
         }
 
+        if let Some(cache_store) = &self.compiler_config.cache_store {
+            compiler.enable_incremental_compilation(cache_store.clone());
+        }
+
         compiler.build()
+    }
+
+    /// Internal setting for whether adapter modules for components will have
+    /// extra WebAssembly instructions inserted performing more debug checks
+    /// then are necessary.
+    #[cfg(feature = "component-model")]
+    pub fn debug_adapter_modules(&mut self, debug: bool) -> &mut Self {
+        self.tunables.debug_adapter_modules = debug;
+        self
     }
 }
 

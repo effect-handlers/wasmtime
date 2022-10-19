@@ -255,7 +255,7 @@ mod test_vmmemory_definition {
     use super::VMMemoryDefinition;
     use memoffset::offset_of;
     use std::mem::size_of;
-    use wasmtime_environ::{Module, VMOffsets};
+    use wasmtime_environ::{Module, PtrSize, VMOffsets};
 
     #[test]
     fn check_vmmemory_definition_offsets() {
@@ -263,15 +263,15 @@ mod test_vmmemory_definition {
         let offsets = VMOffsets::new(size_of::<*mut u8>() as u8, &module);
         assert_eq!(
             size_of::<VMMemoryDefinition>(),
-            usize::from(offsets.size_of_vmmemory_definition())
+            usize::from(offsets.ptr.size_of_vmmemory_definition())
         );
         assert_eq!(
             offset_of!(VMMemoryDefinition, base),
-            usize::from(offsets.vmmemory_definition_base())
+            usize::from(offsets.ptr.vmmemory_definition_base())
         );
         assert_eq!(
             offset_of!(VMMemoryDefinition, current_length),
-            usize::from(offsets.vmmemory_definition_current_length())
+            usize::from(offsets.ptr.vmmemory_definition_current_length())
         );
         /* TODO: Assert that the size of `current_length` matches.
         assert_eq!(
@@ -983,7 +983,13 @@ impl ValRaw {
     /// Creates a WebAssembly `i32` value
     #[inline]
     pub fn i32(i: i32) -> ValRaw {
-        ValRaw { i32: i.to_le() }
+        // Note that this is intentionally not setting the `i32` field, instead
+        // setting the `i64` field with a zero-extended version of `i`. For more
+        // information on this see the comments on `Lower for Result` in the
+        // `wasmtime` crate. Otherwise though all `ValRaw` constructors are
+        // otherwise constrained to guarantee that the initial 64-bits are
+        // always initialized.
+        ValRaw::u64((i as u32).into())
     }
 
     /// Creates a WebAssembly `i64` value
@@ -995,7 +1001,9 @@ impl ValRaw {
     /// Creates a WebAssembly `i32` value
     #[inline]
     pub fn u32(i: u32) -> ValRaw {
-        ValRaw::i32(i as i32)
+        // See comments in `ValRaw::i32` for why this is setting the upper
+        // 32-bits as well.
+        ValRaw::u64(i.into())
     }
 
     /// Creates a WebAssembly `i64` value
@@ -1007,7 +1015,9 @@ impl ValRaw {
     /// Creates a WebAssembly `f32` value
     #[inline]
     pub fn f32(i: u32) -> ValRaw {
-        ValRaw { f32: i.to_le() }
+        // See comments in `ValRaw::i32` for why this is setting the upper
+        // 32-bits as well.
+        ValRaw::u64(i.into())
     }
 
     /// Creates a WebAssembly `f64` value

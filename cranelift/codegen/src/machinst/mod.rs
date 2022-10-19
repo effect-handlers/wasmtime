@@ -45,17 +45,20 @@
 //! ```
 
 use crate::binemit::{Addend, CodeInfo, CodeOffset, Reloc, StackMap};
-use crate::ir::{DynamicStackSlot, SourceLoc, StackSlot, Type};
+use crate::ir::function::FunctionParameters;
+use crate::ir::{DynamicStackSlot, RelSourceLoc, StackSlot, Type};
 use crate::result::CodegenResult;
 use crate::settings::Flags;
 use crate::value_label::ValueLabelsRanges;
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 use cranelift_entity::PrimaryMap;
 use regalloc2::{Allocation, VReg};
 use smallvec::{smallvec, SmallVec};
 use std::string::String;
+
+#[cfg(feature = "enable-serde")]
+use serde::{Deserialize, Serialize};
 
 #[macro_use]
 pub mod isle;
@@ -70,8 +73,6 @@ pub mod blockorder;
 pub use blockorder::*;
 pub mod abi;
 pub use abi::*;
-pub mod abi_impl;
-pub use abi_impl::*;
 pub mod buffer;
 pub use buffer::*;
 pub mod helpers;
@@ -85,6 +86,9 @@ pub mod reg;
 
 /// A machine instruction.
 pub trait MachInst: Clone + Debug {
+    /// The ABI machine spec for this `MachInst`.
+    type ABIMachineSpec: ABIMachineSpec<I = Self>;
+
     /// Return the registers referenced by this machine instruction along with
     /// the modes of reference (use, def, modify).
     fn get_operands<F: Fn(VReg) -> VReg>(&self, collector: &mut OperandCollector<'_, F>);
@@ -95,6 +99,9 @@ pub trait MachInst: Clone + Debug {
     /// Is this a terminator (branch or ret)? If so, return its type
     /// (ret/uncond/cond) and target if applicable.
     fn is_term(&self) -> MachTerminator;
+
+    /// Is this an "args" pseudoinst?
+    fn is_args(&self) -> bool;
 
     /// Should this instruction be included in the clobber-set?
     fn is_included_in_clobbers(&self) -> bool {
@@ -163,6 +170,16 @@ pub trait MachInst: Clone + Debug {
 
     /// Is this a safepoint?
     fn is_safepoint(&self) -> bool;
+
+    /// Generate an instruction that must appear at the beginning of a basic
+    /// block, if any. Note that the return value must not be subject to
+    /// register allocation.
+    fn gen_block_start(
+        _is_indirect_branch_target: bool,
+        _is_forward_edge_cfi_enabled: bool,
+    ) -> Option<Self> {
+        None
+    }
 
     /// A label-use kind: a type that describes the types of label references that
     /// can occur in an instruction.
@@ -256,22 +273,24 @@ pub trait MachInstEmit: MachInst {
 
 /// A trait describing the emission state carried between MachInsts when
 /// emitting a function body.
-pub trait MachInstEmitState<I: MachInst>: Default + Clone + Debug {
+pub trait MachInstEmitState<I: VCodeInst>: Default + Clone + Debug {
     /// Create a new emission state given the ABI object.
-    fn new(abi: &dyn ABICallee<I = I>) -> Self;
+    fn new(abi: &Callee<I::ABIMachineSpec>) -> Self;
     /// Update the emission state before emitting an instruction that is a
     /// safepoint.
     fn pre_safepoint(&mut self, _stack_map: StackMap) {}
     /// Update the emission state to indicate instructions are associated with a
-    /// particular SourceLoc.
-    fn pre_sourceloc(&mut self, _srcloc: SourceLoc) {}
+    /// particular RelSourceLoc.
+    fn pre_sourceloc(&mut self, _srcloc: RelSourceLoc) {}
 }
 
 /// The result of a `MachBackend::compile_function()` call. Contains machine
 /// code (as bytes) and a disassembly, if requested.
-pub struct CompiledCode {
+#[derive(PartialEq, Debug, Clone)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct CompiledCodeBase<T: CompilePhase> {
     /// Machine code.
-    pub buffer: MachBufferFinalized,
+    pub buffer: MachBufferFinalized<T>,
     /// Size of stack frame, in bytes.
     pub frame_size: u32,
     /// Disassembly, if requested.
@@ -294,9 +313,29 @@ pub struct CompiledCode {
     /// This info is generated only if the `machine_code_cfg_info`
     /// flag is set.
     pub bb_edges: Vec<(CodeOffset, CodeOffset)>,
+    /// Minimum alignment for the function, derived from the use of any
+    /// pc-relative loads.
+    pub alignment: u32,
 }
 
-impl CompiledCode {
+impl CompiledCodeStencil {
+    /// Apply function parameters to finalize a stencil into its final form.
+    pub fn apply_params(self, params: &FunctionParameters) -> CompiledCode {
+        CompiledCode {
+            buffer: self.buffer.apply_params(params),
+            frame_size: self.frame_size,
+            disasm: self.disasm,
+            value_labels_ranges: self.value_labels_ranges,
+            sized_stackslot_offsets: self.sized_stackslot_offsets,
+            dynamic_stackslot_offsets: self.dynamic_stackslot_offsets,
+            bb_starts: self.bb_starts,
+            bb_edges: self.bb_edges,
+            alignment: self.alignment,
+        }
+    }
+}
+
+impl<T: CompilePhase> CompiledCodeBase<T> {
     /// Get a `CodeInfo` describing section sizes from this compilation result.
     pub fn code_info(&self) -> CodeInfo {
         CodeInfo {
@@ -307,6 +346,45 @@ impl CompiledCode {
     /// Returns a reference to the machine code generated for this function compilation.
     pub fn code_buffer(&self) -> &[u8] {
         self.buffer.data()
+    }
+}
+
+/// Result of compiling a `FunctionStencil`, before applying `FunctionParameters` onto it.
+///
+/// Only used internally, in a transient manner, for the incremental compilation cache.
+pub type CompiledCodeStencil = CompiledCodeBase<Stencil>;
+
+/// `CompiledCode` in its final form (i.e. after `FunctionParameters` have been applied), ready for
+/// consumption.
+pub type CompiledCode = CompiledCodeBase<Final>;
+
+impl CompiledCode {
+    /// If available, return information about the code layout in the
+    /// final machine code: the offsets (in bytes) of each basic-block
+    /// start, and all basic-block edges.
+    pub fn get_code_bb_layout(&self) -> (Vec<usize>, Vec<(usize, usize)>) {
+        (
+            self.bb_starts.iter().map(|&off| off as usize).collect(),
+            self.bb_edges
+                .iter()
+                .map(|&(from, to)| (from as usize, to as usize))
+                .collect(),
+        )
+    }
+
+    /// Creates unwind information for the function.
+    ///
+    /// Returns `None` if the function has no unwind information.
+    #[cfg(feature = "unwind")]
+    pub fn create_unwind_info(
+        &self,
+        isa: &dyn crate::isa::TargetIsa,
+    ) -> CodegenResult<Option<crate::isa::unwind::UnwindInfo>> {
+        let unwind_info_kind = match isa.triple().operating_system {
+            target_lexicon::OperatingSystem::Windows => UnwindInfoKind::Windows,
+            _ => UnwindInfoKind::SystemV,
+        };
+        isa.emit_unwind_info(self, unwind_info_kind)
     }
 }
 
@@ -324,7 +402,7 @@ pub trait TextSectionBuilder {
     ///
     /// This function returns the offset at which the data was placed in the
     /// text section.
-    fn append(&mut self, labeled: bool, data: &[u8], align: Option<u32>) -> u64;
+    fn append(&mut self, labeled: bool, data: &[u8], align: u32) -> u64;
 
     /// Attempts to resolve a relocation for this function.
     ///

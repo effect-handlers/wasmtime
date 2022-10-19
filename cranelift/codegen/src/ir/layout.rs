@@ -25,7 +25,7 @@ use core::iter::{IntoIterator, Iterator};
 /// While data dependencies are not recorded, instruction ordering does affect control
 /// dependencies, so part of the semantics of the program are determined by the layout.
 ///
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct Layout {
     /// Linked list nodes for the layout order of blocks Forms a doubly linked list, terminated in
     /// both ends by `None`.
@@ -59,6 +59,18 @@ impl Layout {
         self.insts.clear();
         self.first_block = None;
         self.last_block = None;
+    }
+
+    /// Clear instructions from every block, but keep the blocks.
+    ///
+    /// Used by the egraph-based optimization to clear out the
+    /// function body but keep the CFG skeleton.
+    pub(crate) fn clear_insts(&mut self) {
+        self.insts.clear();
+        for block in self.blocks.values_mut() {
+            block.first_inst = None.into();
+            block.last_inst = None.into();
+        }
     }
 
     /// Returns the capacity of the `BlockData` map.
@@ -311,7 +323,7 @@ impl Layout {
     ///
     /// This doesn't affect the position of anything, but it gives more room in the internal
     /// sequence numbers for inserting instructions later.
-    fn full_renumber(&mut self) {
+    pub(crate) fn full_renumber(&mut self) {
         let _tt = timing::layout_renumber();
         let mut seq = 0;
         let mut next_block = self.first_block;
@@ -486,7 +498,7 @@ impl Layout {
 
 /// A single node in the linked-list of blocks.
 // Whenever you add new fields here, don't forget to update the custom serializer for `Layout` too.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Hash)]
 struct BlockNode {
     prev: PackedOption<Block>,
     next: PackedOption<Block>,
@@ -748,7 +760,7 @@ impl Layout {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Hash)]
 struct InstNode {
     /// The Block containing this instruction, or `None` if the instruction is not yet inserted.
     block: PackedOption<Block>,

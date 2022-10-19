@@ -525,9 +525,11 @@ opt_level = "none"
 tls_model = "none"
 libcall_call_conv = "isa_default"
 probestack_size_log2 = 12
+probestack_strategy = "outline"
 regalloc_checker = false
 regalloc_verbose_logs = false
 enable_alias_analysis = true
+use_egraphs = false
 enable_verifier = true
 is_pic = false
 use_colocated_libcalls = false
@@ -548,6 +550,7 @@ probestack_func_adjusts_sp = false
 enable_jump_tables = true
 enable_heap_access_spectre_mitigation = true
 enable_table_access_spectre_mitigation = true
+enable_incremental_compilation_cache_checks = false
 "#
         );
         assert_eq!(f.opt_level(), super::OptLevel::None);

@@ -8,18 +8,85 @@ use cranelift::codegen::ir::Function;
 use cranelift::codegen::Context;
 use cranelift::prelude::*;
 use cranelift_native::builder_with_options;
+use std::fmt;
 
 mod config;
 mod function_generator;
+mod passes;
 
 pub type TestCaseInput = Vec<DataValue>;
 
+/// Simple wrapper to generate a single Cranelift `Function`.
 #[derive(Debug)]
+pub struct SingleFunction(pub Function);
+
+impl<'a> Arbitrary<'a> for SingleFunction {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        FuzzGen::new(u)
+            .generate_func()
+            .map_err(|_| arbitrary::Error::IncorrectFormat)
+            .map(Self)
+    }
+}
+
 pub struct TestCase {
     pub func: Function,
     /// Generate multiple test inputs for each test case.
     /// This allows us to get more coverage per compilation, which may be somewhat expensive.
     pub inputs: Vec<TestCaseInput>,
+}
+
+impl fmt::Debug for TestCase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#";; Fuzzgen test case
+
+test interpret
+test run
+set enable_llvm_abi_extensions
+target aarch64
+target s390x
+target x86_64
+
+"#
+        )?;
+
+        writeln!(f, "{}", self.func)?;
+
+        writeln!(f, "; Note: the results in the below test cases are simply a placeholder and probably will be wrong\n")?;
+
+        for input in self.inputs.iter() {
+            // TODO: We don't know the expected outputs, maybe we can run the interpreter
+            // here to figure them out? Should work, however we need to be careful to catch
+            // panics in case its the interpreter that is failing.
+            // For now create a placeholder output consisting of the zero value for the type
+            let returns = &self.func.signature.returns;
+            let placeholder_output = returns
+                .iter()
+                .map(|param| DataValue::read_from_slice(&[0; 16][..], param.value_type))
+                .map(|val| format!("{}", val))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            // If we have no output, we don't need the == condition
+            let test_condition = match returns.len() {
+                0 => String::new(),
+                1 => format!(" == {}", placeholder_output),
+                _ => format!(" == [{}]", placeholder_output),
+            };
+
+            let args = input
+                .iter()
+                .map(|val| format!("{}", val))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            writeln!(f, "; run: {}({}){}", self.func.name, args, test_condition)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> Arbitrary<'a> for TestCase {
@@ -62,7 +129,6 @@ where
                 };
                 DataValue::from_integer(imm, ty)?
             }
-            ty if ty.is_bool() => DataValue::B(bool::arbitrary(self.u)?),
             // f{32,64}::arbitrary does not generate a bunch of important values
             // such as Signaling NaN's / NaN's with payload, so generate floats from integers.
             F32 => DataValue::F32(Ieee32::with_bits(u32::arbitrary(self.u)?)),
@@ -71,11 +137,12 @@ where
         })
     }
 
-    fn generate_test_inputs(&mut self, signature: &Signature) -> Result<Vec<TestCaseInput>> {
-        let num_tests = self.u.int_in_range(self.config.test_case_inputs.clone())?;
-        let mut inputs = Vec::with_capacity(num_tests);
+    fn generate_test_inputs(mut self, signature: &Signature) -> Result<Vec<TestCaseInput>> {
+        let mut inputs = Vec::new();
 
-        for _ in 0..num_tests {
+        loop {
+            let last_len = self.u.len();
+
             let test_args = signature
                 .params
                 .iter()
@@ -83,12 +150,23 @@ where
                 .collect::<Result<TestCaseInput>>()?;
 
             inputs.push(test_args);
+
+            // Continue generating input as long as we just consumed some of self.u. Otherwise
+            // we'll generate the same test input again and again, forever. Note that once self.u
+            // becomes empty we obviously can't consume any more of it, so this check is more
+            // general. Also note that we need to generate at least one input or the fuzz target
+            // won't actually test anything, so checking at the end of the loop is good, even if
+            // self.u is empty from the start and we end up with all zeros in test_args.
+            assert!(self.u.len() <= last_len);
+            if self.u.len() == last_len {
+                break;
+            }
         }
 
         Ok(inputs)
     }
 
-    fn run_func_passes(&self, func: Function) -> Result<Function> {
+    fn run_func_passes(&mut self, func: Function) -> Result<Function> {
         // Do a NaN Canonicalization pass on the generated function.
         //
         // Both IEEE754 and the Wasm spec are somewhat loose about what is allowed
@@ -105,25 +183,48 @@ where
         // the interpreter won't get that version, so call that pass manually here.
 
         let mut ctx = Context::for_function(func);
-        // Assume that we are generating this function for the current ISA
-        // this is only used for the verifier after `canonicalize_nans` so
-        // it's not too important.
-        let flags = settings::Flags::new(settings::builder());
+        // Assume that we are generating this function for the current ISA.
+        // We disable the verifier here, since if it fails it prevents a test case from
+        // being generated and formatted by `cargo fuzz fmt`.
+        // We run the verifier before compiling the code, so it always gets verified.
+        let flags = settings::Flags::new({
+            let mut builder = settings::builder();
+            builder.set("enable_verifier", "false").unwrap();
+            builder
+        });
+
         let isa = builder_with_options(false)
             .expect("Unable to build a TargetIsa for the current host")
-            .finish(flags)?;
+            .finish(flags)
+            .expect("Failed to build TargetISA");
 
-        ctx.canonicalize_nans(isa.as_ref())?;
+        ctx.canonicalize_nans(isa.as_ref())
+            .expect("Failed NaN canonicalization pass");
+
+        // Run the int_divz pass
+        //
+        // This pass replaces divs and rems with sequences that do not trap
+        passes::do_int_divz_pass(self, &mut ctx.func)?;
+
+        // This pass replaces fcvt* instructions with sequences that do not trap
+        passes::do_fcvt_trap_pass(self, &mut ctx.func)?;
 
         Ok(ctx.func)
     }
 
-    pub fn generate_test(mut self) -> Result<TestCase> {
+    fn generate_func(&mut self) -> Result<Function> {
         let func = FunctionGenerator::new(&mut self.u, &self.config).generate()?;
+        self.run_func_passes(func)
+    }
+
+    pub fn generate_test(mut self) -> Result<TestCase> {
+        // If we're generating test inputs as well as a function, then we're planning to execute
+        // this function. That means that any function references in it need to exist. We don't yet
+        // have infrastructure for generating multiple functions, so just don't generate funcrefs.
+        self.config.funcrefs_per_function = 0..=0;
+
+        let func = self.generate_func()?;
         let inputs = self.generate_test_inputs(&func.signature)?;
-
-        let func = self.run_func_passes(func)?;
-
         Ok(TestCase { func, inputs })
     }
 }

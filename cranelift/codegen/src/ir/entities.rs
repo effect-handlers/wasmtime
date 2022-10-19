@@ -58,7 +58,6 @@ impl Block {
 /// - [`iconst`](super::InstBuilder::iconst) for integer constants
 /// - [`f32const`](super::InstBuilder::f32const) for 32-bit float constants
 /// - [`f64const`](super::InstBuilder::f64const) for 64-bit float constants
-/// - [`bconst`](super::InstBuilder::bconst) for boolean constants
 /// - [`vconst`](super::InstBuilder::vconst) for vector constants
 /// - [`null`](super::InstBuilder::null) for null reference constants
 ///
@@ -88,7 +87,10 @@ impl Value {
 ///
 /// Most usage of `Inst` is internal. `Inst`ructions are returned by
 /// [`InstBuilder`](super::InstBuilder) instructions that do not return a
-/// [`Value`], such as control flow and trap instructions.
+/// [`Value`], such as control flow and trap instructions, as well as instructions that return a
+/// variable (potentially zero!) number of values, like call or call-indirect instructions. To get
+/// the `Value` of such instructions, use [`inst_results`](super::DataFlowGraph::inst_results) or
+/// its analogue in `cranelift_frontend::FuncBuilder`.
 ///
 /// If you look around the API, you can find many inventive uses for `Inst`,
 /// such as [annotating specific instructions with a comment][inst_comment]
@@ -327,6 +329,12 @@ impl FuncRef {
         }
     }
 }
+
+/// A reference to an `UserExternalName`, declared with `Function::declare_imported_user_function`.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+pub struct UserExternalNameRef(u32);
+entity_impl!(UserExternalNameRef, "userextname");
 
 /// An opaque reference to a function [`Signature`](super::Signature).
 ///

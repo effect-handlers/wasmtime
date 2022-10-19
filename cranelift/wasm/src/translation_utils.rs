@@ -31,7 +31,6 @@ pub fn type_to_type<PE: TargetEnvironment + ?Sized>(
         wasmparser::ValType::F64 => Ok(ir::types::F64),
         wasmparser::ValType::V128 => Ok(ir::types::I8X16),
         wasmparser::ValType::Ref(rt) => Ok(environ.reference_type(rt.heap_type.try_into()?)), // TODO(dhil) fixme: verify this is indeed the right thing to do.
-        wasmparser::ValType::Bot => todo!("Implement ValType::Bot for type_to_type"), // TODO(dhil) fixme: I reckon this one is trivial.
     }
 }
 
@@ -55,7 +54,6 @@ pub fn tabletype_to_type<PE: TargetEnvironment + ?Sized>(
                 _ => Ok(None), // TODO(dhil) fixme: verify this is indeed the right thing to do.
             }
         }
-        wasmparser::ValType::Bot => todo!("implement ValType::Bot for tabletype_to_type"), // TODO(dhil) fixme: I reckon this one is trivial.
     }
 }
 
@@ -129,7 +127,6 @@ pub fn block_with_params<PE: TargetEnvironment + ?Sized>(
             wasmparser::ValType::V128 => {
                 builder.append_block_param(block, ir::types::I8X16);
             }
-            wasmparser::ValType::Bot => todo!("Implement ValType::Bot for block_with_params"), // TODO(dhil) fixme
         }
     }
     Ok(block)

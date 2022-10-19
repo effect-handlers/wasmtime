@@ -35,8 +35,6 @@ pub enum ValType {
     V128,
     /// A typeful reference type.
     Ref(RefType),
-    /// Special bottom type.
-    Bot,
 }
 
 impl fmt::Display for ValType {
@@ -48,7 +46,6 @@ impl fmt::Display for ValType {
             ValType::F64 => write!(f, "f64"),
             ValType::V128 => write!(f, "v128"),
             ValType::Ref(rt) => write!(f, "{}", rt),
-            ValType::Bot => write!(f, "bot"),
         }
     }
 }
@@ -79,7 +76,6 @@ impl ValType {
             Self::F64 => WasmType::F64,
             Self::V128 => WasmType::V128,
             Self::Ref(rt) => WasmType::Ref(RefType::to_wasm_ref_type(rt)),
-            Self::Bot => WasmType::Bot,
         }
     }
 
@@ -91,7 +87,6 @@ impl ValType {
             WasmType::F64 => Self::F64,
             WasmType::V128 => Self::V128,
             WasmType::Ref(rt) => Self::Ref(RefType::from_wasm_ref_type(&rt)),
-            WasmType::Bot => Self::Bot,
         }
     }
 }

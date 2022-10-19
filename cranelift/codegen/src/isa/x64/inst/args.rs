@@ -519,6 +519,12 @@ impl Into<SyntheticAmode> for Amode {
     }
 }
 
+impl Into<SyntheticAmode> for VCodeConstant {
+    fn into(self) -> SyntheticAmode {
+        SyntheticAmode::ConstantOffset(self)
+    }
+}
+
 impl PrettyPrint for SyntheticAmode {
     fn pretty_print(&self, _size: u8, allocs: &mut AllocationConsumer<'_>) -> String {
         match self {
@@ -527,7 +533,7 @@ impl PrettyPrint for SyntheticAmode {
             SyntheticAmode::NominalSPOffset { simm32 } => {
                 format!("rsp({} + virtual offset)", *simm32 as i32)
             }
-            SyntheticAmode::ConstantOffset(c) => format!("const({:?})", c),
+            SyntheticAmode::ConstantOffset(c) => format!("const({})", c.as_u32()),
         }
     }
 }
@@ -1383,6 +1389,8 @@ impl fmt::Display for SseOpcode {
 
 #[derive(Clone, PartialEq)]
 pub enum AvxOpcode {
+    Vfmadd213ss,
+    Vfmadd213sd,
     Vfmadd213ps,
     Vfmadd213pd,
 }
@@ -1391,8 +1399,10 @@ impl AvxOpcode {
     /// Which `InstructionSet`s support the opcode?
     pub(crate) fn available_from(&self) -> SmallVec<[InstructionSet; 2]> {
         match self {
-            AvxOpcode::Vfmadd213ps => smallvec![InstructionSet::FMA],
-            AvxOpcode::Vfmadd213pd => smallvec![InstructionSet::FMA],
+            AvxOpcode::Vfmadd213ss
+            | AvxOpcode::Vfmadd213sd
+            | AvxOpcode::Vfmadd213ps
+            | AvxOpcode::Vfmadd213pd => smallvec![InstructionSet::FMA],
         }
     }
 }
@@ -1400,6 +1410,8 @@ impl AvxOpcode {
 impl fmt::Debug for AvxOpcode {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let name = match self {
+            AvxOpcode::Vfmadd213ss => "vfmadd213ss",
+            AvxOpcode::Vfmadd213sd => "vfmadd213sd",
             AvxOpcode::Vfmadd213ps => "vfmadd213ps",
             AvxOpcode::Vfmadd213pd => "vfmadd213pd",
         };
@@ -1569,7 +1581,7 @@ impl fmt::Display for ShiftKind {
 }
 
 /// What kind of division or remainer instruction this is?
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum DivOrRemKind {
     SignedDiv,
     UnsignedDiv,
@@ -1653,8 +1665,6 @@ impl CC {
             IntCC::UnsignedGreaterThan => CC::NBE,
             IntCC::UnsignedLessThanOrEqual => CC::BE,
             IntCC::UnsignedLessThan => CC::B,
-            IntCC::Overflow => CC::O,
-            IntCC::NotOverflow => CC::NO,
         }
     }
 
@@ -1764,7 +1774,8 @@ impl From<FloatCC> for FcmpImm {
 /// However the rounding immediate which this field helps make up, also includes
 /// bits 3 and 4 which define the rounding select and precision mask respectively.
 /// These two bits are not defined here and are implictly set to zero when encoded.
-pub(crate) enum RoundImm {
+#[derive(Clone, Copy)]
+pub enum RoundImm {
     RoundNearest = 0x00,
     RoundDown = 0x01,
     RoundUp = 0x02,

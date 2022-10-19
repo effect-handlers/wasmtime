@@ -3,7 +3,9 @@
 use crate::unwind::UnwindRegistration;
 use anyhow::{bail, Context, Result};
 use object::read::{File, Object, ObjectSection};
+use std::ffi::c_void;
 use std::mem::ManuallyDrop;
+use wasmtime_jit_icache_coherence as icache_coherence;
 use wasmtime_runtime::MmapVec;
 
 /// Management of executable memory within a `MmapVec`
@@ -40,7 +42,7 @@ pub struct Publish<'a> {
     pub obj: File<'a>,
 
     /// Reference to the entire `MmapVec` and its contents.
-    pub mmap: &'a [u8],
+    pub mmap: &'a MmapVec,
 
     /// Reference to just the text section of the object file, a subslice of
     /// `mmap`.
@@ -54,15 +56,6 @@ impl CodeMemory {
     /// The returned `CodeMemory` manages the internal `MmapVec` and the
     /// `publish` method is used to actually make the memory executable.
     pub fn new(mmap: MmapVec) -> Self {
-        #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
-        {
-            // This is a requirement of the `membarrier` call executed by the `publish` method.
-            rustix::process::membarrier(
-                rustix::process::MembarrierCommand::RegisterPrivateExpeditedSyncCore,
-            )
-            .unwrap();
-        }
-
         Self {
             mmap: ManuallyDrop::new(mmap),
             unwind_registration: ManuallyDrop::new(None),
@@ -87,7 +80,7 @@ impl CodeMemory {
     /// After this function executes all JIT code should be ready to execute.
     /// The various parsed results of the internals of the `MmapVec` are
     /// returned through the `Publish` structure.
-    pub fn publish(&mut self) -> Result<Publish<'_>> {
+    pub fn publish(&mut self, enable_branch_protection: bool) -> Result<Publish<'_>> {
         assert!(!self.published);
         self.published = true;
 
@@ -155,21 +148,22 @@ impl CodeMemory {
             // must be added here, though, if relocations pop up.
             assert!(text.relocations().count() == 0);
 
+            // Clear the newly allocated code from cache if the processor requires it
+            //
+            // Do this before marking the memory as R+X, technically we should be able to do it after
+            // but there are some CPU's that have had errata about doing this with read only memory.
+            icache_coherence::clear_cache(ret.text.as_ptr() as *const c_void, ret.text.len())
+                .expect("Failed cache clear");
+
             // Switch the executable portion from read/write to
             // read/execute, notably not using read/write/execute to prevent
             // modifications.
             self.mmap
-                .make_executable(text_range.clone())
+                .make_executable(text_range.clone(), enable_branch_protection)
                 .expect("unable to make memory executable");
 
-            #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
-            {
-                // Ensure that no processor has fetched a stale instruction stream.
-                rustix::process::membarrier(
-                    rustix::process::MembarrierCommand::PrivateExpeditedSyncCore,
-                )
-                .unwrap();
-            }
+            // Flush any in-flight instructions from the pipeline
+            icache_coherence::pipeline_flush_mt().expect("Failed pipeline flush");
 
             // With all our memory set up use the platform-specific
             // `UnwindRegistration` implementation to inform the general

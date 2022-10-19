@@ -13,6 +13,7 @@ use std::any::Any;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Information about a function, such as trap information, address map,
@@ -27,6 +28,9 @@ pub struct FunctionInfo {
     pub start: u64,
     /// The size of the compiled function, in bytes.
     pub length: u32,
+
+    /// The alignment requirements of this function, in bytes.
+    pub alignment: u32,
 }
 
 /// Information about a compiled trampoline which the host can call to enter
@@ -71,6 +75,22 @@ pub enum CompileError {
     DebugInfoNotSupported,
 }
 
+/// Implementation of an incremental compilation's key/value cache store.
+///
+/// In theory, this could just be Cranelift's `CacheKvStore` trait, but it is not as we want to
+/// make sure that wasmtime isn't too tied to Cranelift internals (and as a matter of fact, we
+/// can't depend on the Cranelift trait here).
+pub trait CacheStore: Send + Sync + std::fmt::Debug {
+    /// Try to retrieve an arbitrary cache key entry, and returns a reference to bytes that were
+    /// inserted via `Self::insert` before.
+    fn get(&self, key: &[u8]) -> Option<Cow<[u8]>>;
+
+    /// Given an arbitrary key and bytes, stores them in the cache.
+    ///
+    /// Returns false when insertion in the cache failed.
+    fn insert(&self, key: &[u8], value: Vec<u8>) -> bool;
+}
+
 /// Abstract trait representing the ability to create a `Compiler` below.
 ///
 /// This is used in Wasmtime to separate compiler implementations, currently
@@ -99,6 +119,10 @@ pub trait CompilerBuilder: Send + Sync + fmt::Debug {
     /// Returns a list of all possible settings that can be configured with
     /// [`CompilerBuilder::set`] and [`CompilerBuilder::enable`].
     fn settings(&self) -> Vec<Setting>;
+
+    /// Enables Cranelift's incremental compilation cache, using the given `CacheStore`
+    /// implementation.
+    fn enable_incremental_compilation(&mut self, cache_store: Arc<dyn CacheStore>);
 
     /// Builds a new [`Compiler`] object from this configuration.
     fn build(&self) -> Result<Box<dyn Compiler>>;
@@ -216,6 +240,7 @@ pub trait Compiler: Send + Sync {
                 Arm(_) => Architecture::Arm,
                 Aarch64(_) => Architecture::Aarch64,
                 S390x => Architecture::S390x,
+                Riscv64(_) => Architecture::Riscv64,
                 architecture => {
                     anyhow::bail!("target architecture {:?} is unsupported", architecture,);
                 }
@@ -241,6 +266,9 @@ pub trait Compiler: Send + Sync {
 
     /// Same as [`Compiler::flags`], but ISA-specific (a cranelift-ism)
     fn isa_flags(&self) -> BTreeMap<String, FlagValue>;
+
+    /// Get a flag indicating whether branch protection is enabled.
+    fn is_branch_protection_enabled(&self) -> bool;
 
     /// Returns a suitable compiler usable for component-related compliations.
     ///

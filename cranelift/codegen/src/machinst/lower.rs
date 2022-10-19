@@ -2,28 +2,25 @@
 //! to machine instructions with virtual registers. This is *almost* the final
 //! machine code, except for register allocation.
 
-// TODO: separate the IR-query core of `LowerCtx` from the lowering logic built
-// on top of it, e.g. the side-effect/coloring analysis and the scan support.
+// TODO: separate the IR-query core of `Lower` from the lowering logic built on
+// top of it, e.g. the side-effect/coloring analysis and the scan support.
 
-use crate::data_value::DataValue;
 use crate::entity::SecondaryMap;
 use crate::fx::{FxHashMap, FxHashSet};
 use crate::inst_predicates::{has_lowering_side_effect, is_constant_64bit};
 use crate::ir::{
     types::{FFLAGS, IFLAGS},
     ArgumentPurpose, Block, Constant, ConstantData, DataFlowGraph, ExternalName, Function,
-    GlobalValue, GlobalValueData, Immediate, Inst, InstructionData, MemFlags, Opcode, Signature,
-    SourceLoc, Type, Value, ValueDef, ValueLabelAssignments, ValueLabelStart,
+    GlobalValue, GlobalValueData, Immediate, Inst, InstructionData, MemFlags, Opcode, RelSourceLoc,
+    Type, Value, ValueDef, ValueLabelAssignments, ValueLabelStart,
 };
 use crate::machinst::{
-    non_writable_value_regs, writable_value_regs, ABICallee, BlockIndex, BlockLoweringOrder,
-    LoweredBlock, MachLabel, Reg, VCode, VCodeBuilder, VCodeConstant, VCodeConstantData,
+    non_writable_value_regs, writable_value_regs, BlockIndex, BlockLoweringOrder, Callee,
+    LoweredBlock, MachLabel, Reg, SigSet, VCode, VCodeBuilder, VCodeConstant, VCodeConstantData,
     VCodeConstants, VCodeInst, ValueRegs, Writable,
 };
-use crate::{trace, CodegenResult};
-use alloc::boxed::Box;
+use crate::{trace, CodegenError, CodegenResult};
 use alloc::vec::Vec;
-use core::convert::TryInto;
 use regalloc2::VReg;
 use smallvec::{smallvec, SmallVec};
 use std::fmt::Debug;
@@ -57,141 +54,11 @@ impl InstColor {
     }
 }
 
-/// A context that machine-specific lowering code can use to emit lowered
-/// instructions. This is the view of the machine-independent per-function
-/// lowering context that is seen by the machine backend.
-pub trait LowerCtx {
-    /// The instruction type for which this lowering framework is instantiated.
-    type I: VCodeInst;
-
-    fn dfg(&self) -> &DataFlowGraph;
-
-    // Function-level queries:
-
-    /// Get the `ABICallee`.
-    fn abi(&mut self) -> &mut dyn ABICallee<I = Self::I>;
-    /// Get the (virtual) register that receives the return value. A return
-    /// instruction should lower into a sequence that fills this register. (Why
-    /// not allow the backend to specify its own result register for the return?
-    /// Because there may be multiple return points.)
-    fn retval(&self, idx: usize) -> ValueRegs<Writable<Reg>>;
-    /// Returns the vreg containing the VmContext parameter, if there's one.
-    fn get_vm_context(&self) -> Option<Reg>;
-
-    // General instruction queries:
-
-    /// Get the instdata for a given IR instruction.
-    fn data(&self, ir_inst: Inst) -> &InstructionData;
-    /// Get the controlling type for a polymorphic IR instruction.
-    fn ty(&self, ir_inst: Inst) -> Type;
-    /// Get the target for a call instruction, as an `ExternalName`. Returns a tuple
-    /// providing this name and the "relocation distance", i.e., whether the backend
-    /// can assume the target will be "nearby" (within some small offset) or an
-    /// arbitrary address. (This comes from the `colocated` bit in the CLIF.)
-    fn call_target<'b>(&'b self, ir_inst: Inst) -> Option<(&'b ExternalName, RelocDistance)>;
-    /// Get the signature for a call or call-indirect instruction.
-    fn call_sig<'b>(&'b self, ir_inst: Inst) -> Option<&'b Signature>;
-    /// Get the symbol name, relocation distance estimate, and offset for a
-    /// symbol_value instruction.
-    fn symbol_value<'b>(&'b self, ir_inst: Inst) -> Option<(&'b ExternalName, RelocDistance, i64)>;
-    /// Likewise, but starting with a GlobalValue identifier.
-    fn symbol_value_data<'b>(
-        &'b self,
-        global_value: GlobalValue,
-    ) -> Option<(&'b ExternalName, RelocDistance, i64)>;
-    /// Returns the memory flags of a given memory access.
-    fn memflags(&self, ir_inst: Inst) -> Option<MemFlags>;
-    /// Get the source location for a given instruction.
-    fn srcloc(&self, ir_inst: Inst) -> SourceLoc;
-
-    // Instruction input/output queries:
-
-    /// Get the number of inputs to the given IR instruction.
-    fn num_inputs(&self, ir_inst: Inst) -> usize;
-    /// Get the number of outputs to the given IR instruction.
-    fn num_outputs(&self, ir_inst: Inst) -> usize;
-    /// Get the type for an instruction's input.
-    fn input_ty(&self, ir_inst: Inst, idx: usize) -> Type;
-    /// Get the type for a value.
-    fn value_ty(&self, val: Value) -> Type;
-    /// Get the type for an instruction's output.
-    fn output_ty(&self, ir_inst: Inst, idx: usize) -> Type;
-    /// Get the value of a constant instruction (`iconst`, etc.) as a 64-bit
-    /// value, if possible.
-    fn get_constant(&self, ir_inst: Inst) -> Option<u64>;
-    /// Get the input as one of two options other than a direct register:
-    ///
-    /// - An instruction, given that it is effect-free or able to sink its
-    ///   effect to the current instruction being lowered, and given it has only
-    ///   one output, and if effect-ful, given that this is the only use;
-    /// - A constant, if the value is a constant.
-    ///
-    /// The instruction input may be available in either of these forms.  It may
-    /// be available in neither form, if the conditions are not met; if so, use
-    /// `put_input_in_regs()` instead to get it in a register.
-    ///
-    /// If the backend merges the effect of a side-effecting instruction, it
-    /// must call `sink_inst()`. When this is called, it indicates that the
-    /// effect has been sunk to the current scan location. The sunk
-    /// instruction's result(s) must have *no* uses remaining, because it will
-    /// not be codegen'd (it has been integrated into the current instruction).
-    fn get_input_as_source_or_const(&self, ir_inst: Inst, idx: usize) -> NonRegInput;
-    /// Like `get_input_as_source_or_const` but with a `Value`.
-    fn get_value_as_source_or_const(&self, value: Value) -> NonRegInput;
-    /// Resolves a particular input of an instruction to the `Value` that it is
-    /// represented with.
-    fn input_as_value(&self, ir_inst: Inst, idx: usize) -> Value;
-    /// Increment the reference count for the Value, ensuring that it gets lowered.
-    fn increment_lowered_uses(&mut self, val: Value);
-    /// Put the `idx`th input into register(s) and return the assigned register.
-    fn put_input_in_regs(&mut self, ir_inst: Inst, idx: usize) -> ValueRegs<Reg>;
-    /// Put the given value into register(s) and return the assigned register.
-    fn put_value_in_regs(&mut self, value: Value) -> ValueRegs<Reg>;
-    /// Get the `idx`th output register(s) of the given IR instruction. When
-    /// `backend.lower_inst_to_regs(ctx, inst)` is called, it is expected that
-    /// the backend will write results to these output register(s).  This
-    /// register will always be "fresh"; it is guaranteed not to overlap with
-    /// any of the inputs, and can be freely used as a scratch register within
-    /// the lowered instruction sequence, as long as its final value is the
-    /// result of the computation.
-    fn get_output(&self, ir_inst: Inst, idx: usize) -> ValueRegs<Writable<Reg>>;
-
-    // Codegen primitives: allocate temps, emit instructions, set result registers,
-    // ask for an input to be gen'd into a register.
-
-    /// Get a new temp.
-    fn alloc_tmp(&mut self, ty: Type) -> ValueRegs<Writable<Reg>>;
-    /// Emit a machine instruction.
-    fn emit(&mut self, mach_inst: Self::I);
-    /// Indicate that the side-effect of an instruction has been sunk to the
-    /// current scan location. This should only be done with the instruction's
-    /// original results are not used (i.e., `put_input_in_regs` is not invoked
-    /// for the input produced by the sunk instruction), otherwise the
-    /// side-effect will occur twice.
-    fn sink_inst(&mut self, ir_inst: Inst);
-    /// Retrieve immediate data given a handle.
-    fn get_immediate_data(&self, imm: Immediate) -> &ConstantData;
-    /// Retrieve constant data given a handle.
-    fn get_constant_data(&self, constant_handle: Constant) -> &ConstantData;
-    /// Indicate that a constant should be emitted.
-    fn use_constant(&mut self, constant: VCodeConstantData) -> VCodeConstant;
-    /// Retrieve the value immediate from an instruction. This will perform necessary lookups on the
-    /// `DataFlowGraph` to retrieve even large immediates.
-    fn get_immediate(&self, ir_inst: Inst) -> Option<DataValue>;
-    /// Cause the value in `reg` to be in a virtual reg, by copying it into a new virtual reg
-    /// if `reg` is a real reg.  `ty` describes the type of the value in `reg`.
-    fn ensure_in_vreg(&mut self, reg: Reg, ty: Type) -> Reg;
-
-    /// Note that one vreg is to be treated as an alias of another.
-    fn set_vreg_alias(&mut self, from: Reg, to: Reg);
-}
-
 /// A representation of all of the ways in which a value is available, aside
 /// from as a direct register.
 ///
 /// - An instruction, if it would be allowed to occur at the current location
-///   instead (see [LowerCtx::get_input_as_source_or_const()] for more
-///   details).
+///   instead (see [Lower::get_input_as_source_or_const()] for more details).
 ///
 /// - A constant, if the value is known to be a constant.
 #[derive(Clone, Copy, Debug)]
@@ -200,8 +67,8 @@ pub struct NonRegInput {
     /// computation (and side-effect if applicable) could occur at the
     /// current instruction's location instead.
     ///
-    /// If this instruction's operation is merged into the current
-    /// instruction, the backend must call [LowerCtx::sink_inst()].
+    /// If this instruction's operation is merged into the current instruction,
+    /// the backend must call [Lower::sink_inst()].
     ///
     /// This enum indicates whether this use of the source instruction
     /// is unique or not.
@@ -255,13 +122,13 @@ pub trait LowerBackend {
     /// edge (block-param actuals) into registers, because the actual branch
     /// generation (`lower_branch_group()`) happens *after* any possible merged
     /// out-edge.
-    fn lower<C: LowerCtx<I = Self::MInst>>(&self, ctx: &mut C, inst: Inst) -> CodegenResult<()>;
+    fn lower(&self, ctx: &mut Lower<Self::MInst>, inst: Inst) -> CodegenResult<()>;
 
     /// Lower a block-terminating group of branches (which together can be seen
     /// as one N-way branch), given a vcode MachLabel for each target.
-    fn lower_branch_group<C: LowerCtx<I = Self::MInst>>(
+    fn lower_branch_group(
         &self,
-        ctx: &mut C,
+        ctx: &mut Lower<Self::MInst>,
         insts: &[Inst],
         targets: &[MachLabel],
     ) -> CodegenResult<()>;
@@ -279,6 +146,9 @@ pub trait LowerBackend {
 pub struct Lower<'func, I: VCodeInst> {
     /// The function to lower.
     f: &'func Function,
+
+    /// Machine-independent flags.
+    flags: crate::settings::Flags,
 
     /// Lowered machine instructions.
     vcode: VCodeBuilder<I>,
@@ -333,10 +203,6 @@ pub struct Lower<'func, I: VCodeInst> {
 
     /// The register to use for GetPinnedReg, if any, on this architecture.
     pinned_reg: Option<Reg>,
-
-    /// The vreg containing the special VmContext parameter, if it is present in the current
-    /// function's signature.
-    vm_context: Option<Reg>,
 }
 
 /// How is a value used in the IR?
@@ -374,12 +240,11 @@ pub struct Lower<'func, I: VCodeInst> {
 /// can only get a `&T` (one can only get a "I am one of several users
 /// of this instruction" result).
 ///
-/// We could track these paths, either dynamically as one "looks up
-/// the operand tree" or precomputed. But the former requires state
-/// and means that the `LowerCtx` API carries that state implicitly,
-/// which we'd like to avoid if we can. And the latter implies O(n^2)
-/// storage: it is an all-pairs property (is inst `i` unique from the
-/// point of view of `j`).
+/// We could track these paths, either dynamically as one "looks up the operand
+/// tree" or precomputed. But the former requires state and means that the
+/// `Lower` API carries that state implicitly, which we'd like to avoid if we
+/// can. And the latter implies O(n^2) storage: it is an all-pairs property (is
+/// inst `i` unique from the point of view of `j`).
 ///
 /// To make matters even a little more complex still, a value that is
 /// not uniquely used when initially viewing the IR can *become*
@@ -461,6 +326,10 @@ fn alloc_vregs<I: VCodeInst>(
     let v = *next_vreg;
     let (regclasses, tys) = I::rc_for_type(ty)?;
     *next_vreg += regclasses.len();
+    if *next_vreg >= VReg::MAX {
+        return Err(CodegenError::CodeTooLarge);
+    }
+
     let regs: ValueRegs<Reg> = match regclasses {
         &[rc0] => ValueRegs::one(VReg::new(v, rc0).into()),
         &[rc0, rc1] => ValueRegs::two(VReg::new(v, rc0).into(), VReg::new(v + 1, rc1).into()),
@@ -479,12 +348,15 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
     /// Prepare a new lowering context for the given IR function.
     pub fn new(
         f: &'func Function,
-        abi: Box<dyn ABICallee<I = I>>,
+        flags: crate::settings::Flags,
+        abi: Callee<I::ABIMachineSpec>,
         emit_info: I::Info,
         block_order: BlockLoweringOrder,
+        sigs: SigSet,
     ) -> CodegenResult<Lower<'func, I>> {
         let constants = VCodeConstants::with_capacity(f.dfg.constants.len());
         let mut vcode = VCodeBuilder::new(
+            sigs,
             abi,
             emit_info,
             block_order,
@@ -524,16 +396,6 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                 }
             }
         }
-
-        let vm_context = vcode
-            .abi()
-            .signature()
-            .special_param_index(ArgumentPurpose::VMContext)
-            .map(|vm_context_index| {
-                let entry_block = f.layout.entry_block().unwrap();
-                let param = f.dfg.block_params(entry_block)[vm_context_index];
-                value_regs[param].only_reg().unwrap()
-            });
 
         // Assign vreg(s) to each return value.
         let mut retval_regs = vec![];
@@ -575,6 +437,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
 
         Ok(Lower {
             f,
+            flags,
             vcode,
             value_regs,
             retval_regs,
@@ -589,8 +452,15 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             cur_inst: None,
             ir_insts: vec![],
             pinned_reg: None,
-            vm_context,
         })
+    }
+
+    pub fn sigs(&self) -> &SigSet {
+        self.vcode.sigs()
+    }
+
+    pub fn sigs_mut(&mut self) -> &mut SigSet {
+        self.vcode.sigs_mut()
     }
 
     /// Pre-analysis: compute `value_ir_uses`. See comment on
@@ -719,7 +589,13 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                     continue;
                 }
                 let regs = writable_value_regs(self.value_regs[*param]);
-                for insn in self.vcode.abi().gen_copy_arg_to_regs(i, regs).into_iter() {
+                for insn in self
+                    .vcode
+                    .vcode
+                    .abi
+                    .gen_copy_arg_to_regs(&self.vcode.vcode.sigs, i, regs)
+                    .into_iter()
+                {
                     self.emit(insn);
                 }
                 if self.abi().signature().params[i].purpose == ArgumentPurpose::StructReturn {
@@ -741,7 +617,22 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                     ));
                 }
             }
-            if let Some(insn) = self.vcode.abi().gen_retval_area_setup() {
+            if let Some(insn) = self
+                .vcode
+                .vcode
+                .abi
+                .gen_retval_area_setup(&self.vcode.vcode.sigs)
+            {
+                self.emit(insn);
+            }
+
+            // The `args` instruction below must come first. Finish
+            // the current "IR inst" (with a default source location,
+            // as for other special instructions inserted during
+            // lowering) and continue the scan backward.
+            self.finish_ir_inst(Default::default());
+
+            if let Some(insn) = self.vcode.vcode.abi.take_args() {
                 self.emit(insn);
             }
         }
@@ -754,13 +645,13 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             for insn in self
                 .vcode
                 .abi()
-                .gen_copy_regs_to_retval(i, regs)
+                .gen_copy_regs_to_retval(self.sigs(), i, regs)
                 .into_iter()
             {
                 self.emit(insn);
             }
         }
-        let inst = self.vcode.abi().gen_ret();
+        let inst = self.vcode.abi().gen_ret(self.sigs());
         self.emit(inst);
 
         // Hack: generate a virtual instruction that uses vmctx in
@@ -801,12 +692,11 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         //     possible trap), or if used outside of this block, or if
         //     demanded by another inst, then lower.
         //
-        // That's it! Lowering of side-effecting ops will force all
-        // *needed* (live) non-side-effecting ops to be lowered at the
-        // right places, via the `use_input_reg()` callback on the
-        // `LowerCtx` (that's us). That's because `use_input_reg()`
-        // sets the eager/demand bit for any insts whose result
-        // registers are used.
+        // That's it! Lowering of side-effecting ops will force all *needed*
+        // (live) non-side-effecting ops to be lowered at the right places, via
+        // the `use_input_reg()` callback on the `Lower` (that's us). That's
+        // because `use_input_reg()` sets the eager/demand bit for any insts
+        // whose result registers are used.
         //
         // We set the VCodeBuilder to "backward" mode, so we emit
         // blocks in reverse order wrt the BlockIndex sequence, and
@@ -960,10 +850,10 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         for &arg in self.f.dfg.block_params(block) {
             self.emit_value_label_marks_for_value(arg);
         }
-        self.finish_ir_inst(SourceLoc::default());
+        self.finish_ir_inst(Default::default());
     }
 
-    fn finish_ir_inst(&mut self, loc: SourceLoc) {
+    fn finish_ir_inst(&mut self, loc: RelSourceLoc) {
         self.vcode.set_srcloc(loc);
         // The VCodeBuilder builds in reverse order (and reverses at
         // the end), but `ir_insts` is in forward order, so reverse
@@ -1021,7 +911,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             }
             self.vcode.add_succ(succ, &branch_arg_vregs[..]);
         }
-        self.finish_ir_inst(SourceLoc::default());
+        self.finish_ir_inst(Default::default());
     }
 
     fn collect_branches_and_targets(
@@ -1055,11 +945,11 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
         let temps = self
             .vcode
             .abi()
-            .temps_needed()
+            .temps_needed(self.sigs())
             .into_iter()
             .map(|temp_ty| self.alloc_tmp(temp_ty).only_reg().unwrap())
             .collect::<Vec<_>>();
-        self.vcode.abi().init(temps);
+        self.vcode.init_abi(temps);
 
         // Get the pinned reg here (we only parameterize this function on `B`,
         // not the whole `Lower` impl).
@@ -1121,7 +1011,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                 self.vcode.add_succ(succ, &branch_arg_vregs[..]);
 
                 self.emit(I::gen_jump(MachLabel::from_block(succ)));
-                self.finish_ir_inst(SourceLoc::default());
+                self.finish_ir_inst(Default::default());
             }
 
             // Original block body.
@@ -1133,7 +1023,7 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             if bindex.index() == 0 {
                 // Set up the function with arg vreg inits.
                 self.gen_arg_setup();
-                self.finish_ir_inst(SourceLoc::default());
+                self.finish_ir_inst(Default::default());
             }
 
             self.finish_bb();
@@ -1148,66 +1038,40 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
     }
 }
 
-impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
-    type I = I;
-
-    fn dfg(&self) -> &DataFlowGraph {
+/// Function-level queries.
+impl<'func, I: VCodeInst> Lower<'func, I> {
+    pub fn dfg(&self) -> &DataFlowGraph {
         &self.f.dfg
     }
 
-    fn abi(&mut self) -> &mut dyn ABICallee<I = I> {
+    /// Get the `Callee`.
+    pub fn abi(&self) -> &Callee<I::ABIMachineSpec> {
         self.vcode.abi()
     }
 
-    fn retval(&self, idx: usize) -> ValueRegs<Writable<Reg>> {
+    /// Get the `Callee`.
+    pub fn abi_mut(&mut self) -> &mut Callee<I::ABIMachineSpec> {
+        self.vcode.abi_mut()
+    }
+
+    /// Get the (virtual) register that receives the return value. A return
+    /// instruction should lower into a sequence that fills this register. (Why
+    /// not allow the backend to specify its own result register for the return?
+    /// Because there may be multiple return points.)
+    pub fn retval(&self, idx: usize) -> ValueRegs<Writable<Reg>> {
         writable_value_regs(self.retval_regs[idx])
     }
+}
 
-    fn get_vm_context(&self) -> Option<Reg> {
-        self.vm_context
-    }
-
-    fn data(&self, ir_inst: Inst) -> &InstructionData {
+/// Instruction input/output queries.
+impl<'func, I: VCodeInst> Lower<'func, I> {
+    /// Get the instdata for a given IR instruction.
+    pub fn data(&self, ir_inst: Inst) -> &InstructionData {
         &self.f.dfg[ir_inst]
     }
 
-    fn ty(&self, ir_inst: Inst) -> Type {
-        self.f.dfg.ctrl_typevar(ir_inst)
-    }
-
-    fn call_target<'b>(&'b self, ir_inst: Inst) -> Option<(&'b ExternalName, RelocDistance)> {
-        match &self.f.dfg[ir_inst] {
-            &InstructionData::Call { func_ref, .. }
-            | &InstructionData::FuncAddr { func_ref, .. } => {
-                let funcdata = &self.f.dfg.ext_funcs[func_ref];
-                let dist = funcdata.reloc_distance();
-                Some((&funcdata.name, dist))
-            }
-            _ => None,
-        }
-    }
-
-    fn call_sig<'b>(&'b self, ir_inst: Inst) -> Option<&'b Signature> {
-        match &self.f.dfg[ir_inst] {
-            &InstructionData::Call { func_ref, .. } => {
-                let funcdata = &self.f.dfg.ext_funcs[func_ref];
-                Some(&self.f.dfg.signatures[funcdata.signature])
-            }
-            &InstructionData::CallIndirect { sig_ref, .. } => Some(&self.f.dfg.signatures[sig_ref]),
-            _ => None,
-        }
-    }
-
-    fn symbol_value<'b>(&'b self, ir_inst: Inst) -> Option<(&'b ExternalName, RelocDistance, i64)> {
-        match &self.f.dfg[ir_inst] {
-            &InstructionData::UnaryGlobalValue { global_value, .. } => {
-                self.symbol_value_data(global_value)
-            }
-            _ => None,
-        }
-    }
-
-    fn symbol_value_data<'b>(
+    /// Likewise, but starting with a GlobalValue identifier.
+    pub fn symbol_value_data<'b>(
         &'b self,
         global_value: GlobalValue,
     ) -> Option<(&'b ExternalName, RelocDistance, i64)> {
@@ -1226,7 +1090,8 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         }
     }
 
-    fn memflags(&self, ir_inst: Inst) -> Option<MemFlags> {
+    /// Returns the memory flags of a given memory access.
+    pub fn memflags(&self, ir_inst: Inst) -> Option<MemFlags> {
         match &self.f.dfg[ir_inst] {
             &InstructionData::AtomicCas { flags, .. } => Some(flags),
             &InstructionData::AtomicRmw { flags, .. } => Some(flags),
@@ -1238,45 +1103,72 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         }
     }
 
-    fn srcloc(&self, ir_inst: Inst) -> SourceLoc {
-        self.f.srclocs[ir_inst]
+    /// Get the source location for a given instruction.
+    pub fn srcloc(&self, ir_inst: Inst) -> RelSourceLoc {
+        self.f.rel_srclocs()[ir_inst]
     }
 
-    fn num_inputs(&self, ir_inst: Inst) -> usize {
+    /// Get the number of inputs to the given IR instruction.
+    pub fn num_inputs(&self, ir_inst: Inst) -> usize {
         self.f.dfg.inst_args(ir_inst).len()
     }
 
-    fn num_outputs(&self, ir_inst: Inst) -> usize {
+    /// Get the number of outputs to the given IR instruction.
+    pub fn num_outputs(&self, ir_inst: Inst) -> usize {
         self.f.dfg.inst_results(ir_inst).len()
     }
 
-    fn input_ty(&self, ir_inst: Inst, idx: usize) -> Type {
+    /// Get the type for an instruction's input.
+    pub fn input_ty(&self, ir_inst: Inst, idx: usize) -> Type {
         self.value_ty(self.input_as_value(ir_inst, idx))
     }
 
-    fn value_ty(&self, val: Value) -> Type {
+    /// Get the type for a value.
+    pub fn value_ty(&self, val: Value) -> Type {
         self.f.dfg.value_type(val)
     }
 
-    fn output_ty(&self, ir_inst: Inst, idx: usize) -> Type {
+    /// Get the type for an instruction's output.
+    pub fn output_ty(&self, ir_inst: Inst, idx: usize) -> Type {
         self.f.dfg.value_type(self.f.dfg.inst_results(ir_inst)[idx])
     }
 
-    fn get_constant(&self, ir_inst: Inst) -> Option<u64> {
+    /// Get the value of a constant instruction (`iconst`, etc.) as a 64-bit
+    /// value, if possible.
+    pub fn get_constant(&self, ir_inst: Inst) -> Option<u64> {
         self.inst_constants.get(&ir_inst).cloned()
     }
 
-    fn input_as_value(&self, ir_inst: Inst, idx: usize) -> Value {
+    /// Get the input as one of two options other than a direct register:
+    ///
+    /// - An instruction, given that it is effect-free or able to sink its
+    ///   effect to the current instruction being lowered, and given it has only
+    ///   one output, and if effect-ful, given that this is the only use;
+    /// - A constant, if the value is a constant.
+    ///
+    /// The instruction input may be available in either of these forms.  It may
+    /// be available in neither form, if the conditions are not met; if so, use
+    /// `put_input_in_regs()` instead to get it in a register.
+    ///
+    /// If the backend merges the effect of a side-effecting instruction, it
+    /// must call `sink_inst()`. When this is called, it indicates that the
+    /// effect has been sunk to the current scan location. The sunk
+    /// instruction's result(s) must have *no* uses remaining, because it will
+    /// not be codegen'd (it has been integrated into the current instruction).
+    pub fn input_as_value(&self, ir_inst: Inst, idx: usize) -> Value {
         let val = self.f.dfg.inst_args(ir_inst)[idx];
         self.f.dfg.resolve_aliases(val)
     }
 
-    fn get_input_as_source_or_const(&self, ir_inst: Inst, idx: usize) -> NonRegInput {
+    /// Like `get_input_as_source_or_const` but with a `Value`.
+    pub fn get_input_as_source_or_const(&self, ir_inst: Inst, idx: usize) -> NonRegInput {
         let val = self.input_as_value(ir_inst, idx);
         self.get_value_as_source_or_const(val)
     }
 
-    fn get_value_as_source_or_const(&self, val: Value) -> NonRegInput {
+    /// Resolves a particular input of an instruction to the `Value` that it is
+    /// represented with.
+    pub fn get_value_as_source_or_const(&self, val: Value) -> NonRegInput {
         trace!(
             "get_input_for_val: val {} at cur_inst {:?} cur_scan_entry_color {:?}",
             val,
@@ -1352,16 +1244,19 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         NonRegInput { inst, constant }
     }
 
-    fn increment_lowered_uses(&mut self, val: Value) {
+    /// Increment the reference count for the Value, ensuring that it gets lowered.
+    pub fn increment_lowered_uses(&mut self, val: Value) {
         self.value_lowered_uses[val] += 1
     }
 
-    fn put_input_in_regs(&mut self, ir_inst: Inst, idx: usize) -> ValueRegs<Reg> {
+    /// Put the `idx`th input into register(s) and return the assigned register.
+    pub fn put_input_in_regs(&mut self, ir_inst: Inst, idx: usize) -> ValueRegs<Reg> {
         let val = self.f.dfg.inst_args(ir_inst)[idx];
         self.put_value_in_regs(val)
     }
 
-    fn put_value_in_regs(&mut self, val: Value) -> ValueRegs<Reg> {
+    /// Put the given value into register(s) and return the assigned register.
+    pub fn put_value_in_regs(&mut self, val: Value) -> ValueRegs<Reg> {
         let val = self.f.dfg.resolve_aliases(val);
         trace!("put_value_in_regs: val {}", val);
 
@@ -1371,26 +1266,34 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         let ty = self.f.dfg.value_type(val);
         assert!(ty != IFLAGS && ty != FFLAGS);
 
-        // If the value is a constant, then (re)materialize it at each use. This
-        // lowers register pressure.
-        if let Some(c) = self
-            .f
-            .dfg
-            .value_def(val)
-            .inst()
-            .and_then(|inst| self.get_constant(inst))
-        {
-            let regs = self.alloc_tmp(ty);
-            trace!(" -> regs {:?}", regs);
-            assert!(regs.is_valid());
+        if let Some(inst) = self.f.dfg.value_def(val).inst() {
+            assert!(!self.inst_sunk.contains(&inst));
+        }
 
-            let insts = I::gen_constant(regs, c.into(), ty, |ty| {
-                self.alloc_tmp(ty).only_reg().unwrap()
-            });
-            for inst in insts {
-                self.emit(inst);
+        // If the value is a constant, then (re)materialize it at each
+        // use. This lowers register pressure. (Only do this if we are
+        // not using egraph-based compilation; the egraph framework
+        // more efficiently rematerializes constants where needed.)
+        if !self.flags.use_egraphs() {
+            if let Some(c) = self
+                .f
+                .dfg
+                .value_def(val)
+                .inst()
+                .and_then(|inst| self.get_constant(inst))
+            {
+                let regs = self.alloc_tmp(ty);
+                trace!(" -> regs {:?}", regs);
+                assert!(regs.is_valid());
+
+                let insts = I::gen_constant(regs, c.into(), ty, |ty| {
+                    self.alloc_tmp(ty).only_reg().unwrap()
+                });
+                for inst in insts {
+                    self.emit(inst);
+                }
+                return non_writable_value_regs(regs);
             }
-            return non_writable_value_regs(regs);
         }
 
         let mut regs = self.value_regs[val];
@@ -1415,23 +1318,46 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         regs
     }
 
-    fn get_output(&self, ir_inst: Inst, idx: usize) -> ValueRegs<Writable<Reg>> {
+    /// Get the `idx`th output register(s) of the given IR instruction.
+    ///
+    /// When `backend.lower_inst_to_regs(ctx, inst)` is called, it is expected
+    /// that the backend will write results to these output register(s).  This
+    /// register will always be "fresh"; it is guaranteed not to overlap with
+    /// any of the inputs, and can be freely used as a scratch register within
+    /// the lowered instruction sequence, as long as its final value is the
+    /// result of the computation.
+    pub fn get_output(&self, ir_inst: Inst, idx: usize) -> ValueRegs<Writable<Reg>> {
         let val = self.f.dfg.inst_results(ir_inst)[idx];
         writable_value_regs(self.value_regs[val])
     }
+}
 
-    fn alloc_tmp(&mut self, ty: Type) -> ValueRegs<Writable<Reg>> {
+/// Codegen primitives: allocate temps, emit instructions, set result registers,
+/// ask for an input to be gen'd into a register.
+impl<'func, I: VCodeInst> Lower<'func, I> {
+    /// Get a new temp.
+    pub fn alloc_tmp(&mut self, ty: Type) -> ValueRegs<Writable<Reg>> {
         writable_value_regs(alloc_vregs(ty, &mut self.next_vreg, &mut self.vcode).unwrap())
     }
 
-    fn emit(&mut self, mach_inst: I) {
+    /// Emit a machine instruction.
+    pub fn emit(&mut self, mach_inst: I) {
         trace!("emit: {:?}", mach_inst);
         self.ir_insts.push(mach_inst);
     }
 
-    fn sink_inst(&mut self, ir_inst: Inst) {
+    /// Indicate that the side-effect of an instruction has been sunk to the
+    /// current scan location. This should only be done with the instruction's
+    /// original results are not used (i.e., `put_input_in_regs` is not invoked
+    /// for the input produced by the sunk instruction), otherwise the
+    /// side-effect will occur twice.
+    pub fn sink_inst(&mut self, ir_inst: Inst) {
         assert!(has_lowering_side_effect(self.f, ir_inst));
         assert!(self.cur_scan_entry_color.is_some());
+
+        for result in self.dfg().inst_results(ir_inst) {
+            assert!(self.value_lowered_uses[*result] == 0);
+        }
 
         let sunk_inst_entry_color = self
             .side_effect_inst_entry_colors
@@ -1444,38 +1370,24 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         self.inst_sunk.insert(ir_inst);
     }
 
-    fn get_immediate_data(&self, imm: Immediate) -> &ConstantData {
+    /// Retrieve immediate data given a handle.
+    pub fn get_immediate_data(&self, imm: Immediate) -> &ConstantData {
         self.f.dfg.immediates.get(imm).unwrap()
     }
 
-    fn get_constant_data(&self, constant_handle: Constant) -> &ConstantData {
+    /// Retrieve constant data given a handle.
+    pub fn get_constant_data(&self, constant_handle: Constant) -> &ConstantData {
         self.f.dfg.constants.get(constant_handle)
     }
 
-    fn use_constant(&mut self, constant: VCodeConstantData) -> VCodeConstant {
+    /// Indicate that a constant should be emitted.
+    pub fn use_constant(&mut self, constant: VCodeConstantData) -> VCodeConstant {
         self.vcode.constants().insert(constant)
     }
 
-    fn get_immediate(&self, ir_inst: Inst) -> Option<DataValue> {
-        let inst_data = self.data(ir_inst);
-        match inst_data {
-            InstructionData::Shuffle { imm, .. } => {
-                let buffer = self.f.dfg.immediates.get(imm.clone()).unwrap().as_slice();
-                let value = DataValue::V128(buffer.try_into().expect("a 16-byte data buffer"));
-                Some(value)
-            }
-            InstructionData::UnaryConst {
-                constant_handle, ..
-            } => {
-                let buffer = self.f.dfg.constants.get(constant_handle.clone()).as_slice();
-                let value = DataValue::V128(buffer.try_into().expect("a 16-byte data buffer"));
-                Some(value)
-            }
-            _ => inst_data.imm_value(),
-        }
-    }
-
-    fn ensure_in_vreg(&mut self, reg: Reg, ty: Type) -> Reg {
+    /// Cause the value in `reg` to be in a virtual reg, by copying it into a new virtual reg
+    /// if `reg` is a real reg.  `ty` describes the type of the value in `reg`.
+    pub fn ensure_in_vreg(&mut self, reg: Reg, ty: Type) -> Reg {
         if reg.to_virtual_reg().is_some() {
             reg
         } else {
@@ -1485,7 +1397,8 @@ impl<'func, I: VCodeInst> LowerCtx for Lower<'func, I> {
         }
     }
 
-    fn set_vreg_alias(&mut self, from: Reg, to: Reg) {
+    /// Note that one vreg is to be treated as an alias of another.
+    pub fn set_vreg_alias(&mut self, from: Reg, to: Reg) {
         trace!("set vreg alias: from {:?} to {:?}", from, to);
         self.vcode.set_vreg_alias(from, to);
     }

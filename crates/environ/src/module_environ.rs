@@ -14,9 +14,9 @@ use std::convert::{TryFrom, TryInto};
 use std::path::PathBuf;
 use std::sync::Arc;
 use wasmparser::{
-    CustomSectionReader, DataKind, ElementItem, ElementKind, Encoding, ExternalKind, FuncValidator,
-    FunctionBody, NameSectionReader, Naming, Operator, Parser, Payload, Type, TypeRef, Validator,
-    ValidatorResources,
+    CustomSectionReader, DataKind, ElementItem, ElementKind, Encoding, ExternalKind,
+    FuncToValidate, FunctionBody, NameSectionReader, Naming, Operator, Parser, Payload, Type,
+    TypeRef, Validator, ValidatorResources,
 };
 
 /// Object containing the standalone environment information.
@@ -39,6 +39,13 @@ pub struct ModuleEnvironment<'a, 'data> {
 pub struct ModuleTranslation<'data> {
     /// Module information.
     pub module: Module,
+
+    /// The input wasm binary.
+    ///
+    /// This can be useful, for example, when modules are parsed from a
+    /// component and the embedder wants access to the raw wasm modules
+    /// themselves.
+    pub wasm: &'data [u8],
 
     /// References to the function bodies.
     pub function_body_inputs: PrimaryMap<DefinedFuncIndex, FunctionBodyData<'data>>,
@@ -90,7 +97,7 @@ pub struct FunctionBodyData<'a> {
     /// The body of the function, containing code and locals.
     pub body: FunctionBody<'a>,
     /// Validator for the function body
-    pub validator: FuncValidator<ValidatorResources>,
+    pub validator: FuncToValidate<ValidatorResources>,
 }
 
 #[derive(Debug, Default)]
@@ -162,6 +169,8 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
         parser: Parser,
         data: &'data [u8],
     ) -> WasmResult<ModuleTranslation<'data>> {
+        self.result.wasm = data;
+
         for payload in parser.parse_all(data) {
             self.translate_payload(payload?)?;
         }
@@ -324,7 +333,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                         Operator::V128Const { value } => {
                             GlobalInit::V128Const(u128::from_le_bytes(*value.bytes()))
                         }
-                        Operator::RefNull { ty: _ } => GlobalInit::RefNullConst,
+                        Operator::RefNull { hty: _ } => GlobalInit::RefNullConst,
                         Operator::RefFunc { function_index } => {
                             let index = FuncIndex::from_u32(function_index);
                             self.flag_func_escaped(index);
@@ -430,11 +439,11 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     match kind {
                         ElementKind::Active {
                             table_index,
-                            offset_expr: init_expr,
+                            offset_expr,
                         } => {
                             let table_index = TableIndex::from_u32(table_index);
-                            let mut init_expr_reader = init_expr.get_binary_reader();
-                            let (base, offset) = match init_expr_reader.read_operator()? {
+                            let mut offset_expr_reader = offset_expr.get_binary_reader();
+                            let (base, offset) = match offset_expr_reader.read_operator()? {
                                 Operator::I32Const { value } => (None, value as u32),
                                 Operator::GlobalGet { global_index } => {
                                     (Some(GlobalIndex::from_u32(global_index)), 0)
@@ -548,12 +557,12 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     match kind {
                         DataKind::Active {
                             memory_index,
-                            offset_expr: init_expr,
+                            offset_expr,
                         } => {
                             let range = mk_range(&mut self.result.total_data)?;
                             let memory_index = MemoryIndex::from_u32(memory_index);
-                            let mut init_expr_reader = init_expr.get_binary_reader();
-                            let (base, offset) = match init_expr_reader.read_operator()? {
+                            let mut offset_expr_reader = offset_expr.get_binary_reader();
+                            let (base, offset) = match offset_expr_reader.read_operator()? {
                                 Operator::I32Const { value } => (None, value as u64),
                                 Operator::I64Const { value } => (None, value as u64),
                                 Operator::GlobalGet { global_index } => {

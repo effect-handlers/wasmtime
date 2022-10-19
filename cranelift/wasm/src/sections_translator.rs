@@ -41,8 +41,7 @@ fn tag(e: TagType) -> Tag {
     match e.kind {
         wasmparser::TagKind::Exception => Tag {
             ty: TypeIndex::from_u32(e.func_type_idx),
-        },
-        wasmparser::TagKind::Control => todo!("Handle Control Tag in tag"),
+        }
     }
 }
 
@@ -76,10 +75,11 @@ pub fn parse_type_section<'a>(
         match entry? {
             Type::Func(wasm_func_ty) => {
                 environ.declare_type_func(wasm_func_ty.clone().try_into()?)?;
-                module_translation_state
-                    .wasm_types
-                    .push((wasm_func_ty.params, wasm_func_ty.returns));
-            },
+                module_translation_state.wasm_types.push((
+                    wasm_func_ty.params().to_vec().into(),
+                    wasm_func_ty.results().to_vec().into(),
+                ));
+            }
             Type::Cont(_) => todo!("Implement Type::Cont in parse_type_section"),
         }
     }
@@ -208,7 +208,7 @@ pub fn parse_global_section(
             Operator::V128Const { value } => {
                 GlobalInit::V128Const(u128::from_le_bytes(*value.bytes()))
             }
-            Operator::RefNull { ty: _ } => GlobalInit::RefNullConst,
+            Operator::RefNull { hty: _ } => GlobalInit::RefNullConst,
             Operator::RefFunc { function_index } => {
                 GlobalInit::RefFunc(FuncIndex::from_u32(function_index))
             }
@@ -306,10 +306,10 @@ pub fn parse_element_section<'data>(
         match kind {
             ElementKind::Active {
                 table_index,
-                offset_expr: init_expr,
+                offset_expr,
             } => {
-                let mut init_expr_reader = init_expr.get_binary_reader();
-                let (base, offset) = match init_expr_reader.read_operator()? {
+                let mut offset_expr_reader = offset_expr.get_binary_reader();
+                let (base, offset) = match offset_expr_reader.read_operator()? {
                     Operator::I32Const { value } => (None, value as u32),
                     Operator::GlobalGet { global_index } => {
                         (Some(GlobalIndex::from_u32(global_index)), 0)
@@ -356,10 +356,10 @@ pub fn parse_data_section<'data>(
         match kind {
             DataKind::Active {
                 memory_index,
-                offset_expr: init_expr,
+                offset_expr,
             } => {
-                let mut init_expr_reader = init_expr.get_binary_reader();
-                let (base, offset) = match init_expr_reader.read_operator()? {
+                let mut offset_expr_reader = offset_expr.get_binary_reader();
+                let (base, offset) = match offset_expr_reader.read_operator()? {
                     Operator::I32Const { value } => (None, value as u64),
                     Operator::I64Const { value } => (None, value as u64),
                     Operator::GlobalGet { global_index } => {

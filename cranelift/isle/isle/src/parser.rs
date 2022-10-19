@@ -137,6 +137,7 @@ impl<'a> Parser<'a> {
         self.lparen()?;
         let pos = self.pos();
         let def = match &self.symbol()?[..] {
+            "pragma" => Def::Pragma(self.parse_pragma()?),
             "type" => Def::Type(self.parse_type()?),
             "decl" => Def::Decl(self.parse_decl()?),
             "rule" => Def::Rule(self.parse_rule()?),
@@ -194,6 +195,14 @@ impl<'a> Parser<'a> {
                 pos,
                 "Not a constant identifier; must start with a '$'".to_string(),
             ))
+        }
+    }
+
+    fn parse_pragma(&mut self) -> Result<Pragma> {
+        let ident = self.parse_ident()?;
+        // currently, no pragmas are defined, but the infrastructure is useful to keep around
+        match ident.0.as_str() {
+            pragma => Err(self.error(ident.1, format!("Unknown pragma '{}'", pragma))),
         }
     }
 
@@ -290,6 +299,12 @@ impl<'a> Parser<'a> {
         } else {
             false
         };
+        let multi = if self.is_sym_str("multi") {
+            self.symbol()?;
+            true
+        } else {
+            false
+        };
 
         let term = self.parse_ident()?;
 
@@ -307,6 +322,7 @@ impl<'a> Parser<'a> {
             arg_tys,
             ret_ty,
             pure,
+            multi,
             pos,
         })
     }

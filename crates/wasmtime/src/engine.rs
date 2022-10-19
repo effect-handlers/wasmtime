@@ -354,6 +354,7 @@ impl Engine {
             "enable_llvm_abi_extensions" => *value == FlagValue::Bool(false),
             "enable_pinned_reg" => *value == FlagValue::Bool(false),
             "enable_probestack" => *value == FlagValue::Bool(false),
+            "probestack_strategy" => *value == FlagValue::Enum("outline".into()),
             "use_colocated_libcalls" => *value == FlagValue::Bool(false),
             "use_pinned_reg_as_heap_base" => *value == FlagValue::Bool(false),
 
@@ -367,10 +368,9 @@ impl Engine {
                 }
             }
 
-            // If reference types or backtraces are enabled, we need unwind info. Otherwise, we
-            // don't care.
+            // Windows requires unwind info as part of its ABI.
             "unwind_info" => {
-                if self.config().wasm_backtrace || self.config().features.reference_types {
+                if self.target().operating_system == target_lexicon::OperatingSystem::Windows {
                     *value == FlagValue::Bool(true)
                 } else {
                     return Ok(())
@@ -393,10 +393,12 @@ impl Engine {
             | "machine_code_cfg_info"
             | "tls_model" // wasmtime doesn't use tls right now
             | "opt_level" // opt level doesn't change semantics
+            | "use_egraphs" // optimizing with egraphs doesn't change semantics
             | "enable_alias_analysis" // alias analysis-based opts don't change semantics
             | "probestack_func_adjusts_sp" // probestack above asserted disabled
             | "probestack_size_log2" // probestack above asserted disabled
             | "regalloc" // shouldn't change semantics
+            | "enable_incremental_compilation_cache_checks" // shouldn't change semantics
             | "enable_atomics" => return Ok(()),
 
             // Everything else is unknown and needs to be added somewhere to
@@ -461,6 +463,9 @@ impl Engine {
                 "sign_return_address" => Some(true),
                 // No effect on its own.
                 "sign_return_address_with_bkey" => Some(true),
+                // The `BTI` instruction acts as a `NOP` when unsupported, so it
+                // is safe to enable it.
+                "use_bti" => Some(true),
                 // fall through to the very bottom to indicate that support is
                 // not enabled to test whether this feature is enabled on the
                 // host.
@@ -483,6 +488,17 @@ impl Engine {
                 // not enabled to test whether this feature is enabled on the
                 // host.
                 _ => None,
+            }
+        }
+
+        #[cfg(target_arch = "riscv64")]
+        {
+            enabled = match flag {
+                // make sure `test_isa_flags_mismatch` test pass.
+                "not_a_flag" => None,
+                // due to `is_riscv64_feature_detected` is not stable.
+                // we cannot use it.
+                _ => Some(true),
             }
         }
 
@@ -544,7 +560,6 @@ mod tests {
 
     use anyhow::Result;
     use tempfile::TempDir;
-    use wasmtime_environ::FlagValue;
 
     #[test]
     fn cache_accounts_for_opt_level() -> Result<()> {
@@ -605,21 +620,5 @@ mod tests {
         assert_eq!(engine.config().cache_config.cache_misses(), 1);
 
         Ok(())
-    }
-
-    #[test]
-    #[cfg(compiler)]
-    fn test_disable_backtraces() {
-        let engine = Engine::new(
-            Config::new()
-                .wasm_backtrace(false)
-                .wasm_reference_types(false),
-        )
-        .expect("failed to construct engine");
-        assert_eq!(
-            engine.compiler().flags().get("unwind_info"),
-            Some(&FlagValue::Bool(false)),
-            "unwind info should be disabled unless needed"
-        );
     }
 }

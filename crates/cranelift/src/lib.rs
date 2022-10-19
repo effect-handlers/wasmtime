@@ -8,7 +8,7 @@ use cranelift_codegen::ir;
 use cranelift_codegen::isa::{unwind::UnwindInfo, CallConv, TargetIsa};
 use cranelift_entity::PrimaryMap;
 use cranelift_wasm::{DefinedFuncIndex, FuncIndex, WasmFuncType, WasmType};
-use target_lexicon::CallingConvention;
+use target_lexicon::{Architecture, CallingConvention};
 use wasmtime_environ::{
     FilePos, FunctionInfo, InstructionAddressMap, ModuleTranslation, ModuleTypes, TrapInformation,
 };
@@ -144,7 +144,6 @@ fn value_type(isa: &dyn TargetIsa, ty: WasmType) -> ir::types::Type {
         WasmType::F64 => ir::types::F64,
         WasmType::V128 => ir::types::I8X16,
         WasmType::Ref(rt) => reference_type(rt.heap_type, isa.pointer_type()),
-        WasmType::Bot => todo!("Implement WasmType::Bot for value_type"), // TODO(dhil) fixme
     }
 }
 
@@ -191,6 +190,10 @@ fn func_signature(
                 // about pointer authentication usage, so we can't just use
                 // `CallConv::Fast`.
                 CallConv::WasmtimeAppleAarch64
+            } else if isa.triple().architecture == Architecture::S390x {
+                // On S390x we need a Wasmtime calling convention to ensure
+                // we're using little-endian vector lane order.
+                wasmtime_call_conv(isa)
             } else {
                 CallConv::Fast
             }

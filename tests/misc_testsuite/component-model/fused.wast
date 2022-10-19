@@ -39,14 +39,14 @@
     )
   )
   (core instance $m (instantiate $m))
-  (func $assert_true (param bool) (canon lift (core func $m "assert_true")))
-  (func $assert_false (param bool) (canon lift (core func $m "assert_false")))
-  (func $ret_bool (param u32) (result bool) (canon lift (core func $m "ret-bool")))
+  (func $assert_true (param "a" bool) (canon lift (core func $m "assert_true")))
+  (func $assert_false (param "a" bool) (canon lift (core func $m "assert_false")))
+  (func $ret_bool (param "a" u32) (result bool) (canon lift (core func $m "ret-bool")))
 
   (component $c
-    (import "assert-true" (func $assert_true (param bool)))
-    (import "assert-false" (func $assert_false (param bool)))
-    (import "ret-bool" (func $ret_bool (param u32) (result bool)))
+    (import "assert-true" (func $assert_true (param "a" bool)))
+    (import "assert-false" (func $assert_false (param "a" bool)))
+    (import "ret-bool" (func $ret_bool (param "a" u32) (result bool)))
 
     (core func $assert_true (canon lower (func $assert_true)))
     (core func $assert_false (canon lower (func $assert_false)))
@@ -94,10 +94,10 @@
 (component
   (type $roundtrip (func
     ;; 20 u32 params
-    (param u32) (param u32) (param u32) (param u32) (param u32)
-    (param u32) (param u32) (param u32) (param u32) (param u32)
-    (param u32) (param u32) (param u32) (param u32) (param u32)
-    (param u32) (param u32) (param u32) (param u32) (param u32)
+    (param "a1" u32) (param "a2" u32) (param "a3" u32) (param "a4" u32) (param "a5" u32)
+    (param "a6" u32) (param "a7" u32) (param "a8" u32) (param "a9" u32) (param "a10" u32)
+    (param "a11" u32) (param "a12" u32) (param "a13" u32) (param "a14" u32) (param "a15" u32)
+    (param "a16" u32) (param "a17" u32) (param "a18" u32) (param "a19" u32) (param "a20" u32)
 
     ;; 10 u32 results
     (result (tuple u32 u32 u32 u32 u32 u32 u32 u32 u32 u32))
@@ -296,7 +296,7 @@
         unreachable)
     )
     (core instance $realloc (instantiate $realloc))
-    (func $realloc (param (tuple u32 u32 u32 u32)) (result u32)
+    (func $realloc (param "a" (tuple u32 u32 u32 u32)) (result u32)
       (canon lift (core func $realloc "realloc"))
     )
     (export "realloc" (func $realloc))
@@ -309,7 +309,7 @@
     (func (export "foo") (param i32))
   )
   (core instance $m (instantiate $m))
-  (func $foo (param $tuple20)
+  (func $foo (param "a" $tuple20)
     (canon lift
       (core func $m "foo")
       (memory $m "memory")
@@ -318,7 +318,7 @@
   )
 
   (component $c
-    (import "foo" (func $foo (param $tuple20)))
+    (import "foo" (func $foo (param "a" $tuple20)))
 
     (core module $libc
       (memory (export "memory") 1)
@@ -495,7 +495,7 @@
       )
     )
     (core instance $m (instantiate $m))
-    (func (export "r") (param $in) (result $out)
+    (func (export "r") (param "a" $in) (result $out)
       (canon lift (core func $m "r") (memory $m "memory"))
     )
   )
@@ -511,7 +511,7 @@
       (field "x" u8)
       (field "y" u32)
     ))
-    (import "r" (func $r (param $in) (result $out)))
+    (import "r" (func $r (param "a" $in) (result $out)))
     (core module $libc (memory (export "memory") 1))
     (core instance $libc (instantiate $libc))
     (core func $r (canon lower (func $r) (memory $libc "memory")))
@@ -631,12 +631,12 @@
           i32.const 1)
       )
       (core instance $m (instantiate $m))
-      (func (export "r") (param $big)
+      (func (export "r") (param "a" $big)
         (canon lift (core func $m "r") (memory $m "memory") (realloc (func $m "realloc")))
       )
     )
     (component $c2
-      (import "r" (func $r (param $big)))
+      (import "r" (func $r (param "a" $big)))
       (core module $libc
         (memory (export "memory") 1)
         (func (export "realloc") (param i32 i32 i32 i32) (result i32) unreachable)
@@ -679,12 +679,12 @@
           i32.const 4)
       )
       (core instance $m (instantiate $m))
-      (func (export "r") (param $big)
+      (func (export "r") (param "a" $big)
         (canon lift (core func $m "r") (memory $m "memory") (realloc (func $m "realloc")))
       )
     )
     (component $c2
-      (import "r" (func $r (param $big)))
+      (import "r" (func $r (param "a" $big)))
       (core module $libc
         (memory (export "memory") 1)
         (func (export "realloc") (param i32 i32 i32 i32) (result i32) unreachable)
@@ -717,8 +717,8 @@
 
 ;; simple variant translation
 (component
-  (type $a (variant (case "x" unit)))
-  (type $b (variant (case "y" unit)))
+  (type $a (variant (case "x")))
+  (type $b (variant (case "y")))
 
   (component $c1
     (core module $m
@@ -728,10 +728,10 @@
       )
     )
     (core instance $m (instantiate $m))
-    (func (export "r") (param $a) (result $b) (canon lift (core func $m "r")))
+    (func (export "r") (param "a" $a) (result $b) (canon lift (core func $m "r")))
   )
   (component $c2
-    (import "r" (func $r (param $a) (result $b)))
+    (import "r" (func $r (param "a" $a) (result $b)))
     (core func $r (canon lower (func $r)))
 
     (core module $m
@@ -756,17 +756,17 @@
 ;; invalid variant discriminant in a parameter
 (assert_trap
   (component
-    (type $a (variant (case "x" unit)))
+    (type $a (variant (case "x")))
 
     (component $c1
       (core module $m
         (func (export "r") (param i32))
       )
       (core instance $m (instantiate $m))
-      (func (export "r") (param $a) (canon lift (core func $m "r")))
+      (func (export "r") (param "a" $a) (canon lift (core func $m "r")))
     )
     (component $c2
-      (import "r" (func $r (param $a)))
+      (import "r" (func $r (param "a" $a)))
       (core func $r (canon lower (func $r)))
 
       (core module $m
@@ -789,7 +789,7 @@
 ;; invalid variant discriminant in a result
 (assert_trap
   (component
-    (type $a (variant (case "x" unit)))
+    (type $a (variant (case "x")))
 
     (component $c1
       (core module $m
@@ -829,17 +829,17 @@
       )
     )
     (core instance $m (instantiate $m))
-    (func (export "u8") (param u8) (canon lift (core func $m "u")))
-    (func (export "u16") (param u16) (canon lift (core func $m "u")))
-    (func (export "s8") (param s8) (canon lift (core func $m "s")))
-    (func (export "s16") (param s16) (canon lift (core func $m "s")))
+    (func (export "u8") (param "a" u8) (canon lift (core func $m "u")))
+    (func (export "u16") (param "a" u16) (canon lift (core func $m "u")))
+    (func (export "s8") (param "a" s8) (canon lift (core func $m "s")))
+    (func (export "s16") (param "a" s16) (canon lift (core func $m "s")))
   )
   (component $c2
     (import "" (instance $i
-      (export "u8" (func (param u8)))
-      (export "s8" (func (param s8)))
-      (export "u16" (func (param u16)))
-      (export "s16" (func (param s16)))
+      (export "u8" (func (param "a" u8)))
+      (export "s8" (func (param "a" s8)))
+      (export "u16" (func (param "a" u16)))
+      (export "s16" (func (param "a" s16)))
     ))
 
     (core func $u8 (canon lower (func $i "u8")))
@@ -889,6 +889,12 @@
   (type $d (variant (case "a" float32) (case "b" float64)))
   (type $e (variant (case "a" float32) (case "b" s64)))
 
+  (type $func_a (func (param "x" bool) (param "a" $a)))
+  (type $func_b (func (param "x" bool) (param "b" $b)))
+  (type $func_c (func (param "x" bool) (param "c" $c)))
+  (type $func_d (func (param "x" bool) (param "d" $d)))
+  (type $func_e (func (param "x" bool) (param "e" $d)))
+
   (component $c1
     (core module $m
       (func (export "a") (param i32 i32 i32)
@@ -925,7 +931,7 @@
         (i32.eqz (local.get 0))
         if
           (if (i32.ne (local.get 1) (i32.const 0)) (unreachable))
-          (if (f64.ne (f64.reinterpret_i64 (local.get 2)) (f64.const 8)) (unreachable))
+          (if (f32.ne (f32.reinterpret_i32 (i32.wrap_i64 (local.get 2))) (f32.const 8)) (unreachable))
         else
           (if (i32.ne (local.get 1) (i32.const 1)) (unreachable))
           (if (f64.ne (f64.reinterpret_i64 (local.get 2)) (f64.const 9)) (unreachable))
@@ -935,7 +941,7 @@
         (i32.eqz (local.get 0))
         if
           (if (i32.ne (local.get 1) (i32.const 0)) (unreachable))
-          (if (f64.ne (f64.reinterpret_i64 (local.get 2)) (f64.const 10)) (unreachable))
+          (if (f32.ne (f32.reinterpret_i32 (i32.wrap_i64 (local.get 2))) (f32.const 10)) (unreachable))
         else
           (if (i32.ne (local.get 1) (i32.const 1)) (unreachable))
           (if (i64.ne (local.get 2) (i64.const 11)) (unreachable))
@@ -943,19 +949,19 @@
       )
     )
     (core instance $m (instantiate $m))
-    (func (export "a") (param bool) (param $a) (canon lift (core func $m "a")))
-    (func (export "b") (param bool) (param $b) (canon lift (core func $m "b")))
-    (func (export "c") (param bool) (param $c) (canon lift (core func $m "c")))
-    (func (export "d") (param bool) (param $d) (canon lift (core func $m "d")))
-    (func (export "e") (param bool) (param $e) (canon lift (core func $m "e")))
+    (func (export "a") (type $func_a) (canon lift (core func $m "a")))
+    (func (export "b") (type $func_b) (canon lift (core func $m "b")))
+    (func (export "c") (type $func_c) (canon lift (core func $m "c")))
+    (func (export "d") (type $func_d) (canon lift (core func $m "d")))
+    (func (export "e") (type $func_e) (canon lift (core func $m "e")))
   )
   (component $c2
     (import "" (instance $i
-      (export "a" (func (param bool) (param $a)))
-      (export "b" (func (param bool) (param $b)))
-      (export "c" (func (param bool) (param $c)))
-      (export "d" (func (param bool) (param $d)))
-      (export "e" (func (param bool) (param $e)))
+      (export "a" (func (type $func_a)))
+      (export "b" (func (type $func_b)))
+      (export "c" (func (type $func_c)))
+      (export "d" (func (type $func_d)))
+      (export "e" (func (type $func_e)))
     ))
 
     (core func $a (canon lower (func $i "a")))
@@ -983,10 +989,10 @@
         (call $c (i32.const 0) (i32.const 0) (i64.const 6))
         (call $c (i32.const 1) (i32.const 1) (i64.reinterpret_f64 (f64.const 7)))
 
-        (call $d (i32.const 0) (i32.const 0) (i64.reinterpret_f64 (f64.const 8)))
+        (call $d (i32.const 0) (i32.const 0) (i64.extend_i32_u (i32.reinterpret_f32 (f32.const 8))))
         (call $d (i32.const 1) (i32.const 1) (i64.reinterpret_f64 (f64.const 9)))
 
-        (call $e (i32.const 0) (i32.const 0) (i64.reinterpret_f64 (f64.const 10)))
+        (call $e (i32.const 0) (i32.const 0) (i64.extend_i32_u (i32.reinterpret_f32 (f32.const 10))))
         (call $e (i32.const 1) (i32.const 1) (i64.const 11))
       )
       (start $start)
@@ -1008,10 +1014,10 @@
 ;; different size variants
 (component
   (type $a (variant
-    (case "a" unit)
+    (case "a")
     (case "b" float32)
     (case "c" (tuple float32 u32))
-    (case "d" (tuple float32 unit u64 u8))
+    (case "d" (tuple float32 (record)  u64 u8))
   ))
 
   (component $c1
@@ -1054,11 +1060,11 @@
       )
     )
     (core instance $m (instantiate $m))
-    (func (export "a") (param u8) (param $a) (canon lift (core func $m "a")))
+    (func (export "a") (param "x" u8) (param "a" $a) (canon lift (core func $m "a")))
   )
   (component $c2
     (import "" (instance $i
-      (export "a" (func (param u8) (param $a)))
+      (export "a" (func (param "x" u8) (param "a" $a)))
     ))
 
     (core func $a (canon lower (func $i "a")))
@@ -1115,11 +1121,11 @@
       (func (export "a") (param i32) (result i32) local.get 0)
     )
     (core instance $m (instantiate $m))
-    (func (export "a") (param char) (result char) (canon lift (core func $m "a")))
+    (func (export "a") (param "a" char) (result char) (canon lift (core func $m "a")))
   )
   (component $c2
     (import "" (instance $i
-      (export "a" (func (param char) (result char)))
+      (export "a" (func (param "a" char) (result char)))
     ))
 
     (core func $a (canon lower (func $i "a")))
@@ -1149,7 +1155,7 @@
       ))
     ))
 
-    (func (export "roundtrip") (param char) (canon lift (core func $m "roundtrip")))
+    (func (export "roundtrip") (param "a" char) (canon lift (core func $m "roundtrip")))
   )
   (instance $c1 (instantiate $c1))
   (instance $c2 (instantiate $c2 (with "" (instance $c1))))
@@ -1157,9 +1163,9 @@
   (export "roundtrip" (func $c2 "roundtrip"))
 )
 
-(assert_return (invoke "roundtrip" (char.const "x")) (unit.const))
-(assert_return (invoke "roundtrip" (char.const "⛳")) (unit.const))
-(assert_return (invoke "roundtrip" (char.const "🍰")) (unit.const))
+(assert_return (invoke "roundtrip" (char.const "x")))
+(assert_return (invoke "roundtrip" (char.const "⛳")))
+(assert_return (invoke "roundtrip" (char.const "🍰")))
 
 ;; invalid chars
 (assert_trap
@@ -1167,10 +1173,10 @@
     (component $c1
       (core module $m (func (export "a") (param i32)))
       (core instance $m (instantiate $m))
-      (func (export "a") (param char) (canon lift (core func $m "a")))
+      (func (export "a") (param "a" char) (canon lift (core func $m "a")))
     )
     (component $c2
-      (import "" (instance $i (export "a" (func (param char)))))
+      (import "" (instance $i (export "a" (func (param "a" char)))))
       (core func $a (canon lower (func $i "a")))
       (core module $m
         (import "" "a" (func $a (param i32)))
@@ -1188,10 +1194,10 @@
     (component $c1
       (core module $m (func (export "a") (param i32)))
       (core instance $m (instantiate $m))
-      (func (export "a") (param char) (canon lift (core func $m "a")))
+      (func (export "a") (param "a" char) (canon lift (core func $m "a")))
     )
     (component $c2
-      (import "" (instance $i (export "a" (func (param char)))))
+      (import "" (instance $i (export "a" (func (param "a" char)))))
       (core func $a (canon lower (func $i "a")))
       (core module $m
         (import "" "a" (func $a (param i32)))
@@ -1209,10 +1215,10 @@
     (component $c1
       (core module $m (func (export "a") (param i32)))
       (core instance $m (instantiate $m))
-      (func (export "a") (param char) (canon lift (core func $m "a")))
+      (func (export "a") (param "a" char) (canon lift (core func $m "a")))
     )
     (component $c2
-      (import "" (instance $i (export "a" (func (param char)))))
+      (import "" (instance $i (export "a" (func (param "a" char)))))
       (core func $a (canon lower (func $i "a")))
       (core module $m
         (import "" "a" (func $a (param i32)))
@@ -1312,31 +1318,31 @@
       )
     )
     (core instance $m (instantiate $m))
-    (func (export "f0") (param $f0) (canon lift (core func $m "f0")))
-    (func (export "f1") (param $f1) (canon lift (core func $m "f1")))
-    (func (export "f8") (param $f8) (canon lift (core func $m "f8")))
-    (func (export "f9") (param $f9) (canon lift (core func $m "f9")))
-    (func (export "f16") (param $f16) (canon lift (core func $m "f16")))
-    (func (export "f17") (param $f17) (canon lift (core func $m "f17")))
-    (func (export "f32") (param $f32) (canon lift (core func $m "f32")))
-    (func (export "f33") (param $f33) (canon lift (core func $m "f33")))
-    (func (export "f64") (param $f64) (canon lift (core func $m "f64")))
-    (func (export "f65") (param $f65) (canon lift (core func $m "f65")))
+    (func (export "f0") (param "a" $f0) (canon lift (core func $m "f0")))
+    (func (export "f1") (param "a" $f1) (canon lift (core func $m "f1")))
+    (func (export "f8") (param "a" $f8) (canon lift (core func $m "f8")))
+    (func (export "f9") (param "a" $f9) (canon lift (core func $m "f9")))
+    (func (export "f16") (param "a" $f16) (canon lift (core func $m "f16")))
+    (func (export "f17") (param "a" $f17) (canon lift (core func $m "f17")))
+    (func (export "f32") (param "a" $f32) (canon lift (core func $m "f32")))
+    (func (export "f33") (param "a" $f33) (canon lift (core func $m "f33")))
+    (func (export "f64") (param "a" $f64) (canon lift (core func $m "f64")))
+    (func (export "f65") (param "a" $f65) (canon lift (core func $m "f65")))
   )
   (instance $c1 (instantiate $c1))
 
   (component $c2
     (import "" (instance $i
-      (export "f0" (func (param $f0)))
-      (export "f1" (func (param $f1)))
-      (export "f8" (func (param $f8)))
-      (export "f9" (func (param $f9)))
-      (export "f16" (func (param $f16)))
-      (export "f17" (func (param $f17)))
-      (export "f32" (func (param $f32)))
-      (export "f33" (func (param $f33)))
-      (export "f64" (func (param $f64)))
-      (export "f65" (func (param $f65)))
+      (export "f0" (func (param "a" $f0)))
+      (export "f1" (func (param "a" $f1)))
+      (export "f8" (func (param "a" $f8)))
+      (export "f9" (func (param "a" $f9)))
+      (export "f16" (func (param "a" $f16)))
+      (export "f17" (func (param "a" $f17)))
+      (export "f32" (func (param "a" $f32)))
+      (export "f33" (func (param "a" $f33)))
+      (export "f64" (func (param "a" $f64)))
+      (export "f65" (func (param "a" $f65)))
     ))
     (core func $f0 (canon lower (func $i "f0")))
     (core func $f1 (canon lower (func $i "f1")))

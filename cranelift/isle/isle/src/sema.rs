@@ -236,6 +236,8 @@ pub enum TermKind {
     Decl {
         /// Whether the term is marked as `pure`.
         pure: bool,
+        /// Whether the term is marked as `multi`.
+        multi: bool,
         /// The kind of this term's constructor, if any.
         constructor_kind: Option<ConstructorKind>,
         /// The kind of this term's extractor, if any.
@@ -290,6 +292,9 @@ pub struct ExternalSig {
     pub ret_tys: Vec<TypeId>,
     /// Whether this signature is infallible or not.
     pub infallible: bool,
+    /// "Multiplicity": does the function return multiple values (via
+    /// an iterator)?
+    pub multi: bool,
 }
 
 impl Term {
@@ -353,6 +358,7 @@ impl Term {
     pub fn extractor_sig(&self, tyenv: &TypeEnv) -> Option<ExternalSig> {
         match &self.kind {
             TermKind::Decl {
+                multi,
                 extractor_kind:
                     Some(ExtractorKind::ExternalExtractor {
                         name, infallible, ..
@@ -363,7 +369,8 @@ impl Term {
                 full_name: format!("C::{}", tyenv.syms[name.index()]),
                 param_tys: vec![self.ret_ty],
                 ret_tys: self.arg_tys.clone(),
-                infallible: *infallible,
+                infallible: *infallible && !*multi,
+                multi: *multi,
             }),
             _ => None,
         }
@@ -374,6 +381,7 @@ impl Term {
         match &self.kind {
             TermKind::Decl {
                 constructor_kind: Some(ConstructorKind::ExternalConstructor { name }),
+                multi,
                 pure,
                 ..
             } => Some(ExternalSig {
@@ -381,10 +389,12 @@ impl Term {
                 full_name: format!("C::{}", tyenv.syms[name.index()]),
                 param_tys: self.arg_tys.clone(),
                 ret_tys: vec![self.ret_ty],
-                infallible: !pure,
+                infallible: !pure && !*multi,
+                multi: *multi,
             }),
             TermKind::Decl {
                 constructor_kind: Some(ConstructorKind::InternalConstructor { .. }),
+                multi,
                 ..
             } => {
                 let name = format!("constructor_{}", tyenv.syms[self.name.index()]);
@@ -398,6 +408,7 @@ impl Term {
                     // matching at the toplevel (an entry point can
                     // fail to rewrite).
                     infallible: false,
+                    multi: *multi,
                 })
             }
             _ => None,
@@ -417,8 +428,8 @@ pub struct Rule {
     /// The right-hand side expression that this rule evaluates upon successful
     /// match.
     pub rhs: Expr,
-    /// The priority of this rule, if any.
-    pub prio: Option<i64>,
+    /// The priority of this rule, defaulted to 0 if it was missing in the source.
+    pub prio: i64,
     /// The source position where this rule is defined.
     pub pos: Pos,
 }
@@ -777,6 +788,7 @@ impl TermEnv {
             converters: StableMap::new(),
         };
 
+        env.collect_pragmas(defs);
         env.collect_term_sigs(tyenv, defs);
         env.collect_enum_variant_terms(tyenv);
         tyenv.return_errors()?;
@@ -793,6 +805,11 @@ impl TermEnv {
         tyenv.return_errors()?;
 
         Ok(env)
+    }
+
+    fn collect_pragmas(&mut self, _: &ast::Defs) {
+        // currently, no pragmas are defined, but the infrastructure is useful to keep around
+        return;
     }
 
     fn collect_term_sigs(&mut self, tyenv: &mut TypeEnv, defs: &ast::Defs) {
@@ -854,6 +871,7 @@ impl TermEnv {
                             constructor_kind: None,
                             extractor_kind: None,
                             pure: decl.pure,
+                            multi: decl.multi,
                         },
                     });
                 }
@@ -1014,8 +1032,18 @@ impl TermEnv {
                         );
                         continue;
                     }
-                    TermKind::Decl { extractor_kind, .. } => match extractor_kind {
+                    TermKind::Decl {
+                        multi,
+                        extractor_kind,
+                        ..
+                    } => match extractor_kind {
                         None => {
+                            if *multi {
+                                tyenv.report_error(
+                                    ext.pos,
+                                    "A term declared with `multi` cannot have an internal extractor.".to_string());
+                                continue;
+                            }
                             *extractor_kind = Some(ExtractorKind::InternalExtractor { template });
                         }
                         Some(ext_kind) => {
@@ -1358,7 +1386,7 @@ impl TermEnv {
                         lhs,
                         iflets,
                         rhs,
-                        prio: rule.prio,
+                        prio: rule.prio.unwrap_or(0),
                         pos,
                     });
                 }
@@ -1514,7 +1542,12 @@ impl TermEnv {
                         /* is_root = */ false,
                     ));
                     expected_ty = expected_ty.or(Some(ty));
-                    children.push(subpat);
+
+                    // Normalize nested `And` nodes to a single vector of conjuncts.
+                    match subpat {
+                        Pattern::And(_, subpat_children) => children.extend(subpat_children),
+                        _ => children.push(subpat),
+                    }
                 }
                 if expected_ty.is_none() {
                     tyenv.report_error(pos, "No type for (and ...) form.".to_string());
@@ -1782,7 +1815,19 @@ impl TermEnv {
                 let tid = match self.term_map.get(&name) {
                     Some(t) => t,
                     None => {
-                        tyenv.report_error(pos, format!("Unknown term in pattern: '{}'", sym.0));
+                        // Maybe this was actually a variable binding and the user has placed
+                        // parens around it by mistake? (See #4775.)
+                        if bindings.vars.iter().any(|b| b.name == name) {
+                            tyenv.report_error(
+                                pos,
+                                format!(
+                                    "Unknown term in expression: '{}'. Variable binding under this name exists; try removing the parens?", sym.0));
+                        } else {
+                            tyenv.report_error(
+                                pos,
+                                format!("Unknown term in expression: '{}'", sym.0),
+                            );
+                        }
                         return None;
                     }
                 };

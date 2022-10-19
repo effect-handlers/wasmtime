@@ -7,7 +7,8 @@ use crate::isa::s390x::settings as s390x_settings;
 use crate::isa::unwind::systemv::RegisterMappingError;
 use crate::isa::{Builder as IsaBuilder, TargetIsa};
 use crate::machinst::{
-    compile, CompiledCode, MachTextSectionBuilder, Reg, TextSectionBuilder, VCode,
+    compile, CompiledCode, CompiledCodeStencil, MachTextSectionBuilder, Reg, SigSet,
+    TextSectionBuilder, VCode,
 };
 use crate::result::CodegenResult;
 use crate::settings as shared_settings;
@@ -57,13 +58,26 @@ impl S390xBackend {
         func: &Function,
     ) -> CodegenResult<(VCode<inst::Inst>, regalloc2::Output)> {
         let emit_info = EmitInfo::new(self.isa_flags.clone());
-        let abi = Box::new(abi::S390xABICallee::new(func, self, &self.isa_flags)?);
-        compile::compile::<S390xBackend>(func, self, abi, &self.machine_env, emit_info)
+        let sigs = SigSet::new::<abi::S390xMachineDeps>(func, &self.flags)?;
+        let abi = abi::S390xCallee::new(func, self, &self.isa_flags, &sigs)?;
+        compile::compile::<S390xBackend>(
+            func,
+            self.flags.clone(),
+            self,
+            abi,
+            &self.machine_env,
+            emit_info,
+            sigs,
+        )
     }
 }
 
 impl TargetIsa for S390xBackend {
-    fn compile_function(&self, func: &Function, want_disasm: bool) -> CodegenResult<CompiledCode> {
+    fn compile_function(
+        &self,
+        func: &Function,
+        want_disasm: bool,
+    ) -> CodegenResult<CompiledCodeStencil> {
         let flags = self.flags();
         let (vcode, regalloc_result) = self.compile_vcode(func)?;
 
@@ -78,7 +92,7 @@ impl TargetIsa for S390xBackend {
             log::debug!("disassembly:\n{}", disasm);
         }
 
-        Ok(CompiledCode {
+        Ok(CompiledCodeStencil {
             buffer,
             frame_size,
             disasm: emit_result.disasm,
@@ -87,6 +101,7 @@ impl TargetIsa for S390xBackend {
             dynamic_stackslot_offsets,
             bb_starts: emit_result.bb_offsets,
             bb_edges: emit_result.bb_edges,
+            alignment: emit_result.alignment,
         })
     }
 
@@ -155,6 +170,10 @@ impl TargetIsa for S390xBackend {
     fn text_section_builder(&self, num_funcs: u32) -> Box<dyn TextSectionBuilder> {
         Box::new(MachTextSectionBuilder::<inst::Inst>::new(num_funcs))
     }
+
+    fn function_alignment(&self) -> u32 {
+        4
+    }
 }
 
 impl fmt::Display for S390xBackend {
@@ -186,7 +205,8 @@ mod test {
     use super::*;
     use crate::cursor::{Cursor, FuncCursor};
     use crate::ir::types::*;
-    use crate::ir::{AbiParam, ExternalName, Function, InstBuilder, Signature};
+    use crate::ir::UserFuncName;
+    use crate::ir::{AbiParam, Function, InstBuilder, Signature};
     use crate::isa::CallConv;
     use crate::settings;
     use crate::settings::Configurable;
@@ -195,7 +215,7 @@ mod test {
 
     #[test]
     fn test_compile_function() {
-        let name = ExternalName::testcase("test0");
+        let name = UserFuncName::testcase("test0");
         let mut sig = Signature::new(CallConv::SystemV);
         sig.params.push(AbiParam::new(I32));
         sig.returns.push(AbiParam::new(I32));
@@ -233,7 +253,7 @@ mod test {
 
     #[test]
     fn test_branch_lowering() {
-        let name = ExternalName::testcase("test0");
+        let name = UserFuncName::testcase("test0");
         let mut sig = Signature::new(CallConv::SystemV);
         sig.params.push(AbiParam::new(I32));
         sig.returns.push(AbiParam::new(I32));

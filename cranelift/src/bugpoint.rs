@@ -762,9 +762,6 @@ fn const_for_type<'f, T: InstBuilder<'f>>(mut builder: T, ty: ir::Type) -> &'sta
     } else if ty == F64 {
         builder.f64const(0.0);
         "f64const"
-    } else if ty.is_bool() {
-        builder.bconst(ty, false);
-        "bconst"
     } else if ty.is_ref() {
         builder.null(ty);
         "null"
@@ -810,9 +807,9 @@ fn inst_count(func: &Function) -> usize {
 }
 
 fn resolve_aliases(func: &mut Function) {
-    for block in func.layout.blocks() {
-        for inst in func.layout.block_insts(block) {
-            func.dfg.resolve_aliases_in_arguments(inst);
+    for block in func.stencil.layout.blocks() {
+        for inst in func.stencil.layout.block_insts(block) {
+            func.stencil.dfg.resolve_aliases_in_arguments(inst);
         }
     }
 }
@@ -1073,9 +1070,13 @@ mod tests {
                 "reduction wasn't maximal for insts"
             );
 
-            assert_eq!(
-                format!("{}", reduced_func),
-                expected_str.replace("\r\n", "\n")
+            let actual_ir = format!("{}", reduced_func);
+            let expected_ir = expected_str.replace("\r\n", "\n");
+            assert!(
+                expected_ir == actual_ir,
+                "Expected:\n{}\nGot:\n{}",
+                expected_ir,
+                actual_ir,
             );
         }
     }

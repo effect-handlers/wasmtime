@@ -7,9 +7,7 @@
 //! directory.
 
 use alloc::vec::Vec;
-use core::convert::{TryFrom, TryInto};
 use core::fmt::{self, Display, Formatter};
-use core::num::NonZeroU32;
 use core::ops::{Deref, DerefMut};
 use core::str::FromStr;
 
@@ -17,7 +15,6 @@ use core::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::bitset::BitSet;
-use crate::data_value::DataValue;
 use crate::entity;
 use crate::ir::{
     self,
@@ -75,24 +72,6 @@ impl Opcode {
             Opcode::ResumableTrap | Opcode::ResumableTrapnz => true,
             _ => false,
         }
-    }
-}
-
-impl TryFrom<NonZeroU32> for Opcode {
-    type Error = ();
-
-    #[inline]
-    fn try_from(x: NonZeroU32) -> Result<Self, ()> {
-        let x: u16 = x.get().try_into().map_err(|_| ())?;
-        Self::try_from(x)
-    }
-}
-
-impl From<Opcode> for NonZeroU32 {
-    #[inline]
-    fn from(op: Opcode) -> NonZeroU32 {
-        let x = op as u8;
-        NonZeroU32::new(x as u32).unwrap()
     }
 }
 
@@ -286,39 +265,6 @@ impl InstructionData {
                 debug_assert!(!self.opcode().is_branch());
                 None
             }
-        }
-    }
-
-    /// Return the value of an immediate if the instruction has one or `None` otherwise. Only
-    /// immediate values are considered, not global values, constant handles, condition codes, etc.
-    pub fn imm_value(&self) -> Option<DataValue> {
-        match self {
-            &InstructionData::UnaryBool { imm, .. } => Some(DataValue::from(imm)),
-            // 8-bit.
-            &InstructionData::BinaryImm8 { imm, .. }
-            | &InstructionData::TernaryImm8 { imm, .. } => Some(DataValue::from(imm as i8)), // Note the switch from unsigned to signed.
-            // 32-bit
-            &InstructionData::UnaryIeee32 { imm, .. } => Some(DataValue::from(imm)),
-            &InstructionData::HeapAddr { imm, .. } => {
-                let imm: u32 = imm.into();
-                Some(DataValue::from(imm as i32)) // Note the switch from unsigned to signed.
-            }
-            &InstructionData::Load { offset, .. }
-            | &InstructionData::Store { offset, .. }
-            | &InstructionData::StackLoad { offset, .. }
-            | &InstructionData::StackStore { offset, .. }
-            | &InstructionData::TableAddr { offset, .. } => Some(DataValue::from(offset)),
-            // 64-bit.
-            &InstructionData::UnaryImm { imm, .. }
-            | &InstructionData::BinaryImm64 { imm, .. }
-            | &InstructionData::IntCompareImm { imm, .. } => Some(DataValue::from(imm.bits())),
-            &InstructionData::UnaryIeee64 { imm, .. } => Some(DataValue::from(imm)),
-            // 128-bit; though these immediates are present logically in the IR they are not
-            // included in the `InstructionData` for memory-size reasons. This case, returning
-            // `None`, is left here to alert users of this method that they should retrieve the
-            // value using the `DataFlowGraph`.
-            &InstructionData::Shuffle { imm: _, .. } => None,
-            _ => None,
         }
     }
 
@@ -629,8 +575,6 @@ pub struct ValueTypeSet {
     pub ints: BitSet8,
     /// Allowed float widths
     pub floats: BitSet8,
-    /// Allowed bool widths
-    pub bools: BitSet8,
     /// Allowed ref widths
     pub refs: BitSet8,
     /// Allowed dynamic vectors minimum lane sizes
@@ -647,8 +591,6 @@ impl ValueTypeSet {
             self.ints.contains(l2b)
         } else if scalar.is_float() {
             self.floats.contains(l2b)
-        } else if scalar.is_bool() {
-            self.bools.contains(l2b)
         } else if scalar.is_ref() {
             self.refs.contains(l2b)
         } else {
@@ -675,10 +617,8 @@ impl ValueTypeSet {
             types::I32
         } else if self.floats.max().unwrap_or(0) > 5 {
             types::F32
-        } else if self.bools.max().unwrap_or(0) > 5 {
-            types::B32
         } else {
-            types::B1
+            types::I8
         };
         t.by(1 << self.lanes.min().unwrap()).unwrap()
     }
@@ -810,6 +750,19 @@ mod tests {
     use alloc::string::ToString;
 
     #[test]
+    fn inst_data_is_copy() {
+        fn is_copy<T: Copy>() {}
+        is_copy::<InstructionData>();
+    }
+
+    #[test]
+    fn inst_data_size() {
+        // The size of `InstructionData` is performance sensitive, so make sure
+        // we don't regress it unintentionally.
+        assert_eq!(std::mem::size_of::<InstructionData>(), 16);
+    }
+
+    #[test]
     fn opcodes() {
         use core::mem;
 
@@ -901,7 +854,6 @@ mod tests {
             lanes: BitSet16::from_range(0, 8),
             ints: BitSet8::from_range(4, 7),
             floats: BitSet8::from_range(0, 0),
-            bools: BitSet8::from_range(3, 7),
             refs: BitSet8::from_range(5, 7),
             dynamic_lanes: BitSet16::from_range(0, 4),
         };
@@ -911,9 +863,6 @@ mod tests {
         assert!(vts.contains(I32X4));
         assert!(vts.contains(I32X4XN));
         assert!(!vts.contains(F32));
-        assert!(!vts.contains(B1));
-        assert!(vts.contains(B8));
-        assert!(vts.contains(B64));
         assert!(vts.contains(R32));
         assert!(vts.contains(R64));
         assert_eq!(vts.example().to_string(), "i32");
@@ -922,7 +871,6 @@ mod tests {
             lanes: BitSet16::from_range(0, 8),
             ints: BitSet8::from_range(0, 0),
             floats: BitSet8::from_range(5, 7),
-            bools: BitSet8::from_range(3, 7),
             refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
@@ -932,7 +880,6 @@ mod tests {
             lanes: BitSet16::from_range(1, 8),
             ints: BitSet8::from_range(0, 0),
             floats: BitSet8::from_range(5, 7),
-            bools: BitSet8::from_range(3, 7),
             refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
@@ -940,23 +887,18 @@ mod tests {
 
         let vts = ValueTypeSet {
             lanes: BitSet16::from_range(2, 8),
-            ints: BitSet8::from_range(0, 0),
+            ints: BitSet8::from_range(3, 7),
             floats: BitSet8::from_range(0, 0),
-            bools: BitSet8::from_range(3, 7),
             refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };
-        assert!(!vts.contains(B32X2));
-        assert!(vts.contains(B32X4));
-        assert!(vts.contains(B16X4XN));
-        assert_eq!(vts.example().to_string(), "b32x4");
+        assert_eq!(vts.example().to_string(), "i32x4");
 
         let vts = ValueTypeSet {
             // TypeSet(lanes=(1, 256), ints=(8, 64))
             lanes: BitSet16::from_range(0, 9),
             ints: BitSet8::from_range(3, 7),
             floats: BitSet8::from_range(0, 0),
-            bools: BitSet8::from_range(0, 0),
             refs: BitSet8::from_range(0, 0),
             dynamic_lanes: BitSet16::from_range(0, 8),
         };

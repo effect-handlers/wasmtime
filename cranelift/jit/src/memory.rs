@@ -4,9 +4,11 @@ use memmap2::MmapMut;
 #[cfg(not(any(feature = "selinux-fix", windows)))]
 use std::alloc;
 use std::convert::TryFrom;
+use std::ffi::c_void;
 use std::io;
 use std::mem;
 use std::ptr;
+use wasmtime_jit_icache_coherence as icache_coherence;
 
 /// A simple struct consisting of a pointer and length.
 struct PtrLen {
@@ -104,6 +106,15 @@ impl Drop for PtrLen {
 
 // TODO: add a `Drop` impl for `cfg(target_os = "windows")`
 
+/// Type of branch protection to apply to executable memory.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum BranchProtection {
+    /// No protection.
+    None,
+    /// Use the Branch Target Identification extension of the Arm architecture.
+    BTI,
+}
+
 /// JIT memory manager. This manages pages of suitably aligned and
 /// accessible memory. Memory will be leaked by default to have
 /// function pointers remain valid for the remainder of the
@@ -113,15 +124,17 @@ pub(crate) struct Memory {
     already_protected: usize,
     current: PtrLen,
     position: usize,
+    branch_protection: BranchProtection,
 }
 
 impl Memory {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(branch_protection: BranchProtection) -> Self {
         Self {
             allocations: Vec::new(),
             already_protected: 0,
             current: PtrLen::new(),
             position: 0,
+            branch_protection,
         }
     }
 
@@ -150,6 +163,7 @@ impl Memory {
         // TODO: Allocate more at a time.
         self.current = PtrLen::with_size(size)?;
         self.position = size;
+
         Ok(self.current.ptr)
     }
 
@@ -157,29 +171,45 @@ impl Memory {
     pub(crate) fn set_readable_and_executable(&mut self) {
         self.finish_current();
 
-        #[cfg(feature = "selinux-fix")]
-        {
-            for &PtrLen { ref map, ptr, len } in &self.allocations[self.already_protected..] {
-                if len != 0 && map.is_some() {
-                    unsafe {
-                        region::protect(ptr, len, region::Protection::READ_EXECUTE)
-                            .expect("unable to make memory readable+executable");
-                    }
-                }
-            }
+        // Clear all the newly allocated code from cache if the processor requires it
+        //
+        // Do this before marking the memory as R+X, technically we should be able to do it after
+        // but there are some CPU's that have had errata about doing this with read only memory.
+        for &PtrLen { ptr, len, .. } in self.non_protected_allocations_iter() {
+            unsafe {
+                icache_coherence::clear_cache(ptr as *const c_void, len)
+                    .expect("Failed cache clear")
+            };
         }
 
-        #[cfg(not(feature = "selinux-fix"))]
-        {
-            for &PtrLen { ptr, len } in &self.allocations[self.already_protected..] {
-                if len != 0 {
+        let set_region_readable_and_executable = |ptr, len| {
+            if self.branch_protection == BranchProtection::BTI {
+                #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
+                if std::arch::is_aarch64_feature_detected!("bti") {
+                    let prot = libc::PROT_EXEC | libc::PROT_READ | /* PROT_BTI */ 0x10;
+
                     unsafe {
-                        region::protect(ptr, len, region::Protection::READ_EXECUTE)
-                            .expect("unable to make memory readable+executable");
+                        if libc::mprotect(ptr as *mut libc::c_void, len, prot) < 0 {
+                            panic!("unable to make memory readable+executable");
+                        }
                     }
+
+                    return;
                 }
             }
+
+            unsafe {
+                region::protect(ptr, len, region::Protection::READ_EXECUTE)
+                    .expect("unable to make memory readable+executable");
+            }
+        };
+
+        for &PtrLen { ptr, len, .. } in self.non_protected_allocations_iter() {
+            set_region_readable_and_executable(ptr, len);
         }
+
+        // Flush any in-flight instructions from the pipeline
+        icache_coherence::pipeline_flush_mt().expect("Failed pipeline flush");
 
         self.already_protected = self.allocations.len();
     }
@@ -188,31 +218,25 @@ impl Memory {
     pub(crate) fn set_readonly(&mut self) {
         self.finish_current();
 
-        #[cfg(feature = "selinux-fix")]
-        {
-            for &PtrLen { ref map, ptr, len } in &self.allocations[self.already_protected..] {
-                if len != 0 && map.is_some() {
-                    unsafe {
-                        region::protect(ptr, len, region::Protection::READ)
-                            .expect("unable to make memory readonly");
-                    }
-                }
-            }
-        }
-
-        #[cfg(not(feature = "selinux-fix"))]
-        {
-            for &PtrLen { ptr, len } in &self.allocations[self.already_protected..] {
-                if len != 0 {
-                    unsafe {
-                        region::protect(ptr, len, region::Protection::READ)
-                            .expect("unable to make memory readonly");
-                    }
-                }
+        for &PtrLen { ptr, len, .. } in self.non_protected_allocations_iter() {
+            unsafe {
+                region::protect(ptr, len, region::Protection::READ)
+                    .expect("unable to make memory readonly");
             }
         }
 
         self.already_protected = self.allocations.len();
+    }
+
+    /// Iterates non protected memory allocations that are of not zero bytes in size.
+    fn non_protected_allocations_iter(&self) -> impl Iterator<Item = &PtrLen> {
+        let iter = self.allocations[self.already_protected..].iter();
+
+        #[cfg(feature = "selinux-fix")]
+        return iter.filter(|&PtrLen { ref map, len, .. }| len != 0 && map.is_some());
+
+        #[cfg(not(feature = "selinux-fix"))]
+        return iter.filter(|&PtrLen { len, .. }| *len != 0);
     }
 
     /// Frees all allocated memory regions that would be leaked otherwise.

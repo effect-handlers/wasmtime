@@ -1,0 +1,55 @@
+test compile precise-output
+set unwind_info=false
+target riscv64
+
+function %dynamic_heap_check(i64 vmctx, i32) -> i64 {
+    gv0 = vmctx
+    gv1 = load.i64 notrap aligned gv0
+    heap0 = dynamic gv0, bound gv1, offset_guard 0x1000, index_type i32
+
+block0(v0: i64, v1: i32):
+    v2 = heap_addr.i64 heap0, v1, 0
+    return v2
+}
+
+; block0:
+;   uext.w t4,a1
+;   ld t0,0(a0)
+;   addi t0,t0,0
+;   ugt t1,t4,t0##ty=i64
+;   andi t1,t1,255
+;   beq t1,zero,taken(label1),not_taken(label2)
+; block1:
+;   add t1,a0,t4
+;   ugt t4,t4,t0##ty=i64
+;   li t2,0
+;   selectif_spectre_guard a0,t2,t1##test=t4
+;   ret
+; block2:
+;   udf##trap_code=heap_oob
+
+function %static_heap_check(i64 vmctx, i32) -> i64 {
+    gv0 = vmctx
+    heap0 = static gv0, bound 0x1_0000, offset_guard 0x1000, index_type i32
+
+block0(v0: i64, v1: i32):
+    v2 = heap_addr.i64 heap0, v1, 0
+    return v2
+}
+
+; block0:
+;   uext.w t4,a1
+;   lui t3,16
+;   ugt t0,t4,t3##ty=i64
+;   andi t0,t0,255
+;   beq t0,zero,taken(label1),not_taken(label2)
+; block1:
+;   add t0,a0,t4
+;   lui t3,16
+;   ugt t1,t4,t3##ty=i64
+;   li t2,0
+;   selectif_spectre_guard a0,t2,t0##test=t1
+;   ret
+; block2:
+;   udf##trap_code=heap_oob
+

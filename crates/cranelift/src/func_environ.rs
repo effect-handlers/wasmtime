@@ -22,11 +22,6 @@ use wasmtime_environ::{
 };
 use wasmtime_environ::{FUNCREF_INIT_BIT, FUNCREF_MASK};
 
-/// Compute an `ir::ExternalName` for a given wasm function index.
-pub fn get_func_name(func_index: FuncIndex) -> ir::ExternalName {
-    ir::ExternalName::user(0, func_index.as_u32())
-}
-
 macro_rules! declare_function_signatures {
     (
         $(
@@ -1293,7 +1288,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             _ => unreachable!(),
         };
 
-        Ok(pos.ins().bint(ir::types::I32, bool_is_null))
+        Ok(pos.ins().uextend(ir::types::I32, bool_is_null))
     }
 
     fn translate_ref_func(
@@ -1385,9 +1380,9 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                         global_type: pointer_type,
                         readonly: true,
                     });
-                    let base_offset = i32::from(self.offsets.vmmemory_definition_base());
+                    let base_offset = i32::from(self.offsets.ptr.vmmemory_definition_base());
                     let current_length_offset =
-                        i32::from(self.offsets.vmmemory_definition_current_length());
+                        i32::from(self.offsets.ptr.vmmemory_definition_current_length());
                     (memory, base_offset, current_length_offset)
                 } else {
                     let owned_index = self.module.owned_memory_index(def_index);
@@ -1408,9 +1403,9 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                     global_type: pointer_type,
                     readonly: true,
                 });
-                let base_offset = i32::from(self.offsets.vmmemory_definition_base());
+                let base_offset = i32::from(self.offsets.ptr.vmmemory_definition_base());
                 let current_length_offset =
-                    i32::from(self.offsets.vmmemory_definition_current_length());
+                    i32::from(self.offsets.ptr.vmmemory_definition_current_length());
                 (memory, base_offset, current_length_offset)
             }
         };
@@ -1511,7 +1506,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     ) -> WasmResult<ir::FuncRef> {
         let sig = crate::func_signature(self.isa, self.translation, self.types, index);
         let signature = func.import_signature(sig);
-        let name = get_func_name(index);
+        let name =
+            ir::ExternalName::User(func.declare_imported_user_function(ir::UserExternalName {
+                namespace: 0,
+                index: index.as_u32(),
+            }));
         Ok(func.import_function(ir::ExtFuncData {
             name,
             signature,
@@ -1775,7 +1774,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                         pos.ins()
                             .load(pointer_type, ir::MemFlags::trusted(), base, offset);
                     let vmmemory_definition_offset =
-                        i64::from(self.offsets.vmmemory_definition_current_length());
+                        i64::from(self.offsets.ptr.vmmemory_definition_current_length());
                     let vmmemory_definition_ptr =
                         pos.ins().iadd_imm(vmmemory_ptr, vmmemory_definition_offset);
                     // This atomic access of the
@@ -1807,7 +1806,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                         .load(pointer_type, ir::MemFlags::trusted(), base, offset);
                 if is_shared {
                     let vmmemory_definition_offset =
-                        i64::from(self.offsets.vmmemory_definition_current_length());
+                        i64::from(self.offsets.ptr.vmmemory_definition_current_length());
                     let vmmemory_definition_ptr =
                         pos.ins().iadd_imm(vmmemory_ptr, vmmemory_definition_offset);
                     pos.ins().atomic_load(
@@ -1820,7 +1819,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                         pointer_type,
                         ir::MemFlags::trusted(),
                         vmmemory_ptr,
-                        i32::from(self.offsets.vmmemory_definition_current_length()),
+                        i32::from(self.offsets.ptr.vmmemory_definition_current_length()),
                     )
                 }
             }

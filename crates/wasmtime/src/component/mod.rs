@@ -8,13 +8,13 @@ mod func;
 mod instance;
 mod linker;
 mod matching;
+mod storage;
 mod store;
 pub mod types;
 mod values;
 pub use self::component::Component;
 pub use self::func::{
-    ComponentParams, ComponentType, Func, IntoComponentFunc, Lift, Lower, TypedFunc, WasmList,
-    WasmStr,
+    ComponentNamedList, ComponentType, Func, Lift, Lower, TypedFunc, WasmList, WasmStr,
 };
 pub use self::instance::{ExportInstance, Exports, Instance, InstancePre};
 pub use self::linker::{Linker, LinkerInstance};
@@ -28,14 +28,15 @@ pub use wasmtime_component_macro::{flags, ComponentType, Lift, Lower};
 #[doc(hidden)]
 pub mod __internal {
     pub use super::func::{
-        align_to, format_flags, next_field, typecheck_enum, typecheck_flags, typecheck_record,
-        typecheck_union, typecheck_variant, MaybeUninitExt, Memory, MemoryMut, Options,
+        format_flags, lower_payload, typecheck_enum, typecheck_flags, typecheck_record,
+        typecheck_union, typecheck_variant, ComponentVariant, MaybeUninitExt, Memory, MemoryMut,
+        Options,
     };
     pub use crate::map_maybe_uninit;
     pub use crate::store::StoreOpaque;
     pub use anyhow;
     pub use wasmtime_environ;
-    pub use wasmtime_environ::component::{ComponentTypes, InterfaceType};
+    pub use wasmtime_environ::component::{CanonicalAbiInfo, ComponentTypes, InterfaceType};
 }
 
 pub(crate) use self::store::ComponentStoreData;

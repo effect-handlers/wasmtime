@@ -153,7 +153,6 @@ impl Val {
                     HeapType::Bot => panic!("no bot"),
                 }
             }
-            ValType::Bot => todo!("Implement ValType::Bot for from_raw"), // TODO(dhil) fixme: I think this one is trivial.
         }
     }
 

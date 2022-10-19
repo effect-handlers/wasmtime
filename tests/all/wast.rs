@@ -21,15 +21,13 @@ fn run_wast(wast: &str, strategy: Strategy, pooling: bool) -> anyhow::Result<()>
     }
     let wast = Path::new(wast);
 
-    let simd = feature_found(wast, "simd");
     let memory64 = feature_found(wast, "memory64");
     let multi_memory = feature_found(wast, "multi-memory");
     let threads = feature_found(wast, "threads");
     let function_references = feature_found(wast, "function-references");
 
     let mut cfg = Config::new();
-    cfg.wasm_simd(simd)
-        .wasm_multi_memory(multi_memory)
+    cfg.wasm_multi_memory(multi_memory)
         .wasm_threads(threads)
         .wasm_memory64(memory64)
         .wasm_function_references(function_references)

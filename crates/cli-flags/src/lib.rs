@@ -128,6 +128,10 @@ pub struct CommonOptions {
     #[clap(long)]
     pub disable_cache: bool,
 
+    /// Disable parallel compilation
+    #[clap(long)]
+    pub disable_parallel_compilation: bool,
+
     /// Enables or disables WebAssembly features
     #[clap(long, value_name = "FEATURE,FEATURE,...", parse(try_from_str = parse_wasm_features))]
     pub wasm_features: Option<WasmFeatures>,
@@ -233,7 +237,11 @@ pub struct CommonOptions {
 
 impl CommonOptions {
     pub fn parse_from_str(s: &str) -> Result<Self> {
-        let parts = s.split(" ");
+        let parts = s.split(" ").filter(|s| !s.is_empty());
+        // The first argument is the name of the executable, which we don't use
+        // here, but have to provide because `clap` skips over it, and otherwise
+        // our first CLI flag will be ignored.
+        let parts = Some("wasmtime").into_iter().chain(parts);
         let options =
             Self::try_parse_from(parts).context("unable to parse options from passed flags")?;
         Ok(options)
@@ -290,6 +298,10 @@ impl CommonOptions {
                     config.cache_config_load_default()?;
                 }
             }
+        }
+
+        if self.disable_parallel_compilation {
+            config.parallel_compilation(false);
         }
 
         if let Some(max) = self.static_memory_maximum_size {
@@ -738,11 +750,11 @@ mod test {
 
         assert_eq!(use_func(""), use_clap_parser(&[]));
         assert_eq!(
-            use_func("foo --wasm-features=threads"),
+            use_func("--wasm-features=threads"),
             use_clap_parser(&["foo", "--wasm-features=threads"])
         );
         assert_eq!(
-            use_func("foo --cranelift-set enable_simd=true"),
+            use_func("--cranelift-set enable_simd=true"),
             use_clap_parser(&["foo", "--cranelift-set", "enable_simd=true"])
         );
     }

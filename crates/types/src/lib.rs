@@ -27,8 +27,6 @@ pub enum WasmType {
     V128,
     /// Reference type
     Ref(WasmRefType),
-    /// Bottom type
-    Bot,
 }
 
 impl TryFrom<wasmparser::ValType> for WasmType {
@@ -42,7 +40,6 @@ impl TryFrom<wasmparser::ValType> for WasmType {
             F64 => Ok(WasmType::F64),
             V128 => Ok(WasmType::V128),
             Ref(rt) => Ok(WasmType::Ref(WasmRefType::try_from(rt)?)),
-            Bot => Ok(WasmType::Bot),
         }
     }
 }
@@ -56,7 +53,6 @@ impl From<WasmType> for wasmparser::ValType {
             WasmType::F64 => wasmparser::ValType::F64,
             WasmType::V128 => wasmparser::ValType::V128,
             WasmType::Ref(rt) => wasmparser::ValType::Ref(wasmparser::RefType::from(rt)),
-            WasmType::Bot => wasmparser::ValType::Bot,
         }
     }
 }
@@ -70,7 +66,6 @@ impl fmt::Display for WasmType {
             WasmType::F64 => write!(f, "f64"),
             WasmType::V128 => write!(f, "v128"),
             WasmType::Ref(rt) => write!(f, "{}", rt),
-            WasmType::Bot => write!(f, "bot"),
         }
     }
 }
@@ -135,10 +130,10 @@ impl TryFrom<wasmparser::HeapType> for WasmHeapType {
     fn try_from(ht: wasmparser::HeapType) -> Result<Self, Self::Error> {
         use wasmparser::HeapType::*;
         match ht {
-            Bot      => Ok(WasmHeapType::Bot),
-            Func     => Ok(WasmHeapType::Func),
-            Extern   => Ok(WasmHeapType::Extern),
-            Index(i) => Ok(WasmHeapType::Index(i)),
+            Bot          => Ok(WasmHeapType::Bot),
+            Func         => Ok(WasmHeapType::Func),
+            Extern       => Ok(WasmHeapType::Extern),
+            TypedFunc(i) => Ok(WasmHeapType::Index(u32::from(i))),
         }
     }
 }
@@ -149,7 +144,10 @@ impl From<WasmHeapType> for wasmparser::HeapType {
             WasmHeapType::Bot      => wasmparser::HeapType::Bot,
             WasmHeapType::Func     => wasmparser::HeapType::Func,
             WasmHeapType::Extern   => wasmparser::HeapType::Extern,
-            WasmHeapType::Index(i) => wasmparser::HeapType::Index(i),
+            WasmHeapType::Index(i) => match i.try_into() { // TODO(dhil): we should update the interface in wasm-tools/wasmparser to make this more convenient.
+                Ok(ht) => ht,
+                _ => panic!("todo"),
+            },
         }
     }
 }
@@ -219,15 +217,15 @@ impl TryFrom<wasmparser::FuncType> for WasmFuncType {
     type Error = WasmError;
     fn try_from(ty: wasmparser::FuncType) -> Result<Self, Self::Error> {
         let params = ty
-            .params
-            .into_vec()
-            .into_iter()
+            .params()
+            .iter()
+            .copied()
             .map(WasmType::try_from)
             .collect::<Result<_, Self::Error>>()?;
         let returns = ty
-            .returns
-            .into_vec()
-            .into_iter()
+            .results()
+            .iter()
+            .copied()
             .map(WasmType::try_from)
             .collect::<Result<_, Self::Error>>()?;
         Ok(Self::new(params, returns))
@@ -469,8 +467,7 @@ impl From<wasmparser::TagType> for Tag {
         match ty.kind {
             wasmparser::TagKind::Exception => Tag {
                 ty: TypeIndex::from_u32(ty.func_type_idx),
-            },
-            wasmparser::TagKind::Control => todo!("Implement From for Control Tag"),
+            }
         }
     }
 }

@@ -298,7 +298,6 @@ impl Global {
                     }
                 }
                 ValType::V128 => Val::V128(*definition.as_u128()),
-                ValType::Bot => todo!("Implement ValType::Bot for get"), // TODO(dhil) fixme: I think this one is trivial.
             }
         }
     }

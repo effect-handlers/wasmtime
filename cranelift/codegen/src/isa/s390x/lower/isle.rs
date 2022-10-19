@@ -3,11 +3,12 @@
 // Pull in the ISLE generated code.
 pub mod generated_code;
 
+use crate::ir::ExternalName;
 // Types that the generated ISLE code uses via `use super::*`.
 use crate::isa::s390x::abi::{S390xMachineDeps, REG_SAVE_AREA_SIZE};
 use crate::isa::s390x::inst::{
-    gpr, stack_reg, writable_gpr, zero_reg, CallIndInfo, CallInfo, Cond, Inst as MInst, MemArg,
-    MemArgPair, UImm12, UImm16Shifted, UImm32Shifted,
+    gpr, stack_reg, writable_gpr, zero_reg, CallIndInfo, CallInfo, Cond, Inst as MInst, LaneOrder,
+    MemArg, MemArgPair, SymbolReloc, UImm12, UImm16Shifted, UImm32Shifted,
 };
 use crate::isa::s390x::settings::Flags as IsaFlags;
 use crate::machinst::isle::*;
@@ -16,13 +17,14 @@ use crate::settings::Flags;
 use crate::{
     ir::{
         condcodes::*, immediates::*, types::*, AtomicRmwOp, Endianness, Inst, InstructionData,
-        LibCall, MemFlags, Opcode, TrapCode, Value, ValueList,
+        KnownSymbol, LibCall, MemFlags, Opcode, TrapCode, Value, ValueList,
     },
     isa::unwind::UnwindInst,
     isa::CallConv,
-    machinst::abi_impl::ABIMachineSpec,
-    machinst::{InsnOutput, LowerCtx, VCodeConstant, VCodeConstantData},
+    machinst::abi::ABIMachineSpec,
+    machinst::{ArgPair, InsnOutput, Lower, MachInst, VCodeConstant, VCodeConstantData},
 };
+use crate::{isle_common_prelude_methods, isle_lower_prelude_methods};
 use regalloc2::PReg;
 use smallvec::{smallvec, SmallVec};
 use std::boxed::Box;
@@ -34,27 +36,27 @@ use target_lexicon::Triple;
 /// Information describing a library call to be emitted.
 pub struct LibCallInfo {
     libcall: LibCall,
+    tls_symbol: Option<SymbolReloc>,
 }
 
 type BoxCallInfo = Box<CallInfo>;
 type BoxCallIndInfo = Box<CallIndInfo>;
 type VecMachLabel = Vec<MachLabel>;
 type BoxExternalName = Box<ExternalName>;
+type BoxSymbolReloc = Box<SymbolReloc>;
 type VecMInst = Vec<MInst>;
 type VecMInstBuilder = Cell<Vec<MInst>>;
+type VecArgPair = Vec<ArgPair>;
 
 /// The main entry point for lowering with ISLE.
-pub(crate) fn lower<C>(
-    lower_ctx: &mut C,
+pub(crate) fn lower(
+    lower_ctx: &mut Lower<MInst>,
     triple: &Triple,
     flags: &Flags,
     isa_flags: &IsaFlags,
     outputs: &[InsnOutput],
     inst: Inst,
-) -> Result<(), ()>
-where
-    C: LowerCtx<I = MInst>,
-{
+) -> Result<(), ()> {
     lower_common(
         lower_ctx,
         triple,
@@ -67,17 +69,14 @@ where
 }
 
 /// The main entry point for branch lowering with ISLE.
-pub(crate) fn lower_branch<C>(
-    lower_ctx: &mut C,
+pub(crate) fn lower_branch(
+    lower_ctx: &mut Lower<MInst>,
     triple: &Triple,
     flags: &Flags,
     isa_flags: &IsaFlags,
     branch: Inst,
     targets: &[MachLabel],
-) -> Result<(), ()>
-where
-    C: LowerCtx<I = MInst>,
-{
+) -> Result<(), ()> {
     lower_common(
         lower_ctx,
         triple,
@@ -89,65 +88,77 @@ where
     )
 }
 
-impl<C> generated_code::Context for IsleContext<'_, C, Flags, IsaFlags, 6>
-where
-    C: LowerCtx<I = MInst>,
-{
-    isle_prelude_methods!();
+impl generated_code::Context for IsleContext<'_, '_, MInst, Flags, IsaFlags, 6> {
+    isle_lower_prelude_methods!();
 
-    fn abi_sig(&mut self, sig_ref: SigRef) -> ABISig {
-        let sig = &self.lower_ctx.dfg().signatures[sig_ref];
-        ABISig::from_func_sig::<S390xMachineDeps>(sig, self.flags).unwrap()
+    fn abi_sig(&mut self, sig_ref: SigRef) -> Sig {
+        self.lower_ctx.sigs().abi_sig_for_sig_ref(sig_ref)
     }
 
-    fn abi_accumulate_outgoing_args_size(&mut self, abi: &ABISig) -> Unit {
-        let off = abi.sized_stack_arg_space() + abi.sized_stack_ret_space();
+    fn abi_lane_order(&mut self, abi: &Sig) -> LaneOrder {
+        lane_order_for_call_conv(self.lower_ctx.sigs()[*abi].call_conv())
+    }
+
+    fn abi_accumulate_outgoing_args_size(&mut self, abi: &Sig) -> Unit {
+        let off = self.lower_ctx.sigs()[*abi].sized_stack_arg_space()
+            + self.lower_ctx.sigs()[*abi].sized_stack_ret_space();
         self.lower_ctx
-            .abi()
+            .abi_mut()
             .accumulate_outgoing_args_size(off as u32);
     }
 
-    fn abi_call_info(&mut self, abi: &ABISig, name: ExternalName, opcode: &Opcode) -> BoxCallInfo {
-        let (uses, defs, clobbers) = abi.call_uses_defs_clobbers::<S390xMachineDeps>();
+    fn abi_call_info(&mut self, abi: &Sig, name: ExternalName, opcode: &Opcode) -> BoxCallInfo {
+        let (uses, defs, clobbers) =
+            self.lower_ctx.sigs()[*abi].call_uses_defs_clobbers::<S390xMachineDeps>();
         Box::new(CallInfo {
             dest: name.clone(),
             uses,
             defs,
             clobbers,
             opcode: *opcode,
-            caller_callconv: self.lower_ctx.abi().call_conv(),
-            callee_callconv: abi.call_conv(),
+            caller_callconv: self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
+            callee_callconv: self.lower_ctx.sigs()[*abi].call_conv(),
+            tls_symbol: None,
         })
     }
 
-    fn abi_call_ind_info(&mut self, abi: &ABISig, target: Reg, opcode: &Opcode) -> BoxCallIndInfo {
-        let (uses, defs, clobbers) = abi.call_uses_defs_clobbers::<S390xMachineDeps>();
+    fn abi_call_ind_info(&mut self, abi: &Sig, target: Reg, opcode: &Opcode) -> BoxCallIndInfo {
+        let (uses, defs, clobbers) =
+            self.lower_ctx.sigs()[*abi].call_uses_defs_clobbers::<S390xMachineDeps>();
         Box::new(CallIndInfo {
             rn: target,
             uses,
             defs,
             clobbers,
             opcode: *opcode,
-            caller_callconv: self.lower_ctx.abi().call_conv(),
-            callee_callconv: abi.call_conv(),
+            caller_callconv: self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
+            callee_callconv: self.lower_ctx.sigs()[*abi].call_conv(),
         })
     }
 
     fn lib_call_info_memcpy(&mut self) -> LibCallInfo {
         LibCallInfo {
             libcall: LibCall::Memcpy,
+            tls_symbol: None,
+        }
+    }
+
+    fn lib_call_info_tls_get_offset(&mut self, tls_symbol: &SymbolReloc) -> LibCallInfo {
+        LibCallInfo {
+            libcall: LibCall::ElfTlsGetOffset,
+            tls_symbol: Some(tls_symbol.clone()),
         }
     }
 
     fn lib_accumulate_outgoing_args_size(&mut self, _: &LibCallInfo) -> Unit {
         // Libcalls only require the register save area.
         self.lower_ctx
-            .abi()
+            .abi_mut()
             .accumulate_outgoing_args_size(REG_SAVE_AREA_SIZE);
     }
 
     fn lib_call_info(&mut self, info: &LibCallInfo) -> BoxCallInfo {
-        let caller_callconv = self.lower_ctx.abi().call_conv();
+        let caller_callconv = self.lower_ctx.abi().call_conv(self.lower_ctx.sigs());
         let callee_callconv = CallConv::for_libcall(&self.flags, caller_callconv);
 
         // Uses and defs are defined by the particular libcall.
@@ -156,6 +167,7 @@ where
                 smallvec![gpr(2), gpr(3), gpr(4)],
                 smallvec![writable_gpr(2)],
             ),
+            LibCall::ElfTlsGetOffset => (smallvec![gpr(2), gpr(12)], smallvec![writable_gpr(2)]),
             _ => unreachable!(),
         };
 
@@ -173,7 +185,13 @@ where
             opcode: Opcode::Call,
             caller_callconv,
             callee_callconv,
+            tls_symbol: info.tls_symbol.clone(),
         })
+    }
+
+    #[inline]
+    fn box_symbol_reloc(&mut self, symbol_reloc: &SymbolReloc) -> BoxSymbolReloc {
+        Box::new(symbol_reloc.clone())
     }
 
     #[inline]
@@ -234,7 +252,7 @@ where
     #[inline]
     fn gpr32_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I8 | I16 | I32 | B1 | B8 | B16 | B32 => Some(ty),
+            I8 | I16 | I32 => Some(ty),
             _ => None,
         }
     }
@@ -242,7 +260,7 @@ where
     #[inline]
     fn gpr64_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I64 | B64 | R64 => Some(ty),
+            I64 | R64 => Some(ty),
             _ => None,
         }
     }
@@ -250,7 +268,7 @@ where
     #[inline]
     fn vr128_ty(&mut self, ty: Type) -> Option<Type> {
         match ty {
-            I128 | B128 => Some(ty),
+            I128 => Some(ty),
             _ if ty.is_vector() && ty.bits() == 128 => Some(ty),
             _ => None,
         }
@@ -388,8 +406,37 @@ where
     }
 
     #[inline]
+    fn lane_order(&mut self) -> Option<LaneOrder> {
+        Some(lane_order_for_call_conv(
+            self.lower_ctx.abi().call_conv(self.lower_ctx.sigs()),
+        ))
+    }
+
+    #[inline]
     fn be_lane_idx(&mut self, ty: Type, idx: u8) -> u8 {
-        ty.lane_count() as u8 - 1 - idx
+        match self.lane_order().unwrap() {
+            LaneOrder::LittleEndian => ty.lane_count() as u8 - 1 - idx,
+            LaneOrder::BigEndian => idx,
+        }
+    }
+
+    #[inline]
+    fn be_vec_const(&mut self, ty: Type, n: u128) -> u128 {
+        match self.lane_order().unwrap() {
+            LaneOrder::LittleEndian => n,
+            LaneOrder::BigEndian => {
+                let lane_count = ty.lane_count();
+                let lane_bits = ty.lane_bits();
+                let lane_mask = (1u128 << lane_bits) - 1;
+                let mut n_le = n;
+                let mut n_be = 0u128;
+                for _ in 0..lane_count {
+                    n_be = (n_be << lane_bits) | (n_le & lane_mask);
+                    n_le = n_le >> lane_bits;
+                }
+                n_be
+            }
+        }
     }
 
     #[inline]
@@ -401,17 +448,19 @@ where
 
     #[inline]
     fn shuffle_mask_from_u128(&mut self, idx: u128) -> (u128, u16) {
-        let bytes = idx.to_be_bytes();
+        let bytes = match self.lane_order().unwrap() {
+            LaneOrder::LittleEndian => idx.to_be_bytes().map(|x| {
+                if x < 16 {
+                    15 - x
+                } else if x < 32 {
+                    47 - x
+                } else {
+                    128
+                }
+            }),
+            LaneOrder::BigEndian => idx.to_le_bytes().map(|x| if x < 32 { x } else { 128 }),
+        };
         let and_mask = bytes.iter().fold(0, |acc, &x| (acc << 1) | (x < 32) as u16);
-        let bytes = bytes.map(|x| {
-            if x < 16 {
-                15 - x
-            } else if x < 32 {
-                47 - x
-            } else {
-                128
-            }
-        });
         let permute_mask = u128::from_be_bytes(bytes);
         (permute_mask, and_mask)
     }
@@ -708,6 +757,15 @@ where
     }
 
     #[inline]
+    fn memarg_got(&mut self) -> MemArg {
+        MemArg::Symbol {
+            name: Box::new(ExternalName::KnownSymbol(KnownSymbol::ElfGlobalOffsetTable)),
+            offset: 0,
+            flags: MemFlags::trusted(),
+        }
+    }
+
+    #[inline]
     fn memarg_symbol_offset_sum(&mut self, off1: i64, off2: i64) -> Option<i32> {
         let off = i32::try_from(off1 + off2).ok()?;
         if off & 1 == 0 {
@@ -786,6 +844,16 @@ where
     }
 }
 
+/// Lane order to be used for a given calling convention.
+#[inline]
+fn lane_order_for_call_conv(call_conv: CallConv) -> LaneOrder {
+    if call_conv.extends_wasmtime() {
+        LaneOrder::LittleEndian
+    } else {
+        LaneOrder::BigEndian
+    }
+}
+
 /// Zero-extend the low `from_bits` bits of `value` to a full u64.
 #[inline]
 fn zero_extend_to_u64(value: u64, from_bits: u8) -> u64 {
@@ -825,7 +893,5 @@ fn condcode_is_signed(cc: IntCC) -> bool {
         IntCC::UnsignedGreaterThan => false,
         IntCC::UnsignedLessThanOrEqual => false,
         IntCC::UnsignedLessThan => false,
-        IntCC::Overflow => true,
-        IntCC::NotOverflow => true,
     }
 }

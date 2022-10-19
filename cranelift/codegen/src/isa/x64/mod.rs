@@ -8,8 +8,10 @@ use crate::ir::{condcodes::IntCC, Function, Type};
 use crate::isa::unwind::systemv;
 use crate::isa::x64::{inst::regs::create_reg_env_systemv, settings as x64_settings};
 use crate::isa::Builder as IsaBuilder;
-use crate::machinst::Reg;
-use crate::machinst::{compile, CompiledCode, MachTextSectionBuilder, TextSectionBuilder, VCode};
+use crate::machinst::{
+    compile, CompiledCode, CompiledCodeStencil, MachTextSectionBuilder, Reg, SigSet,
+    TextSectionBuilder, VCode,
+};
 use crate::result::{CodegenError, CodegenResult};
 use crate::settings::{self as shared_settings, Flags};
 use alloc::{boxed::Box, vec::Vec};
@@ -51,13 +53,18 @@ impl X64Backend {
         // This performs lowering to VCode, register-allocates the code, computes
         // block layout and finalizes branches. The result is ready for binary emission.
         let emit_info = EmitInfo::new(flags.clone(), self.x64_flags.clone());
-        let abi = Box::new(abi::X64ABICallee::new(&func, self, &self.x64_flags)?);
-        compile::compile::<Self>(&func, self, abi, &self.reg_env, emit_info)
+        let sigs = SigSet::new::<abi::X64ABIMachineSpec>(func, &self.flags)?;
+        let abi = abi::X64Callee::new(&func, self, &self.x64_flags, &sigs)?;
+        compile::compile::<Self>(&func, flags, self, abi, &self.reg_env, emit_info, sigs)
     }
 }
 
 impl TargetIsa for X64Backend {
-    fn compile_function(&self, func: &Function, want_disasm: bool) -> CodegenResult<CompiledCode> {
+    fn compile_function(
+        &self,
+        func: &Function,
+        want_disasm: bool,
+    ) -> CodegenResult<CompiledCodeStencil> {
         let flags = self.flags();
         let (vcode, regalloc_result) = self.compile_vcode(func, flags.clone())?;
 
@@ -72,7 +79,7 @@ impl TargetIsa for X64Backend {
             log::trace!("disassembly:\n{}", disasm);
         }
 
-        Ok(CompiledCode {
+        Ok(CompiledCodeStencil {
             buffer,
             frame_size,
             disasm: emit_result.disasm,
@@ -81,6 +88,7 @@ impl TargetIsa for X64Backend {
             dynamic_stackslot_offsets,
             bb_starts: emit_result.bb_offsets,
             bb_edges: emit_result.bb_edges,
+            alignment: emit_result.alignment,
         })
     }
 
@@ -151,6 +159,12 @@ impl TargetIsa for X64Backend {
     fn text_section_builder(&self, num_funcs: u32) -> Box<dyn TextSectionBuilder> {
         Box::new(MachTextSectionBuilder::<inst::Inst>::new(num_funcs))
     }
+
+    /// Align functions on x86 to 16 bytes, ensuring that rip-relative loads to SSE registers are
+    /// always from aligned memory.
+    fn function_alignment(&self) -> u32 {
+        16
+    }
 }
 
 impl fmt::Display for X64Backend {
@@ -201,8 +215,8 @@ fn isa_constructor(
 mod test {
     use super::*;
     use crate::cursor::{Cursor, FuncCursor};
-    use crate::ir::{types::*, SourceLoc, ValueLabel, ValueLabelStart};
-    use crate::ir::{AbiParam, ExternalName, Function, InstBuilder, JumpTableData, Signature};
+    use crate::ir::{types::*, RelSourceLoc, SourceLoc, UserFuncName, ValueLabel, ValueLabelStart};
+    use crate::ir::{AbiParam, Function, InstBuilder, JumpTableData, Signature};
     use crate::isa::CallConv;
     use crate::settings;
     use crate::settings::Configurable;
@@ -217,7 +231,7 @@ mod test {
     /// well do the test here, where we have a backend to use.
     #[test]
     fn test_cold_blocks() {
-        let name = ExternalName::testcase("test0");
+        let name = UserFuncName::testcase("test0");
         let mut sig = Signature::new(CallConv::SystemV);
         sig.params.push(AbiParam::new(I32));
         sig.returns.push(AbiParam::new(I32));
@@ -271,35 +285,35 @@ mod test {
         pos.func.dfg.values_labels.as_mut().unwrap().insert(
             v0,
             crate::ir::ValueLabelAssignments::Starts(vec![ValueLabelStart {
-                from: SourceLoc::new(1),
+                from: RelSourceLoc::new(1),
                 label: ValueLabel::new(1),
             }]),
         );
         pos.func.dfg.values_labels.as_mut().unwrap().insert(
             v1,
             crate::ir::ValueLabelAssignments::Starts(vec![ValueLabelStart {
-                from: SourceLoc::new(2),
+                from: RelSourceLoc::new(2),
                 label: ValueLabel::new(1),
             }]),
         );
         pos.func.dfg.values_labels.as_mut().unwrap().insert(
             v2,
             crate::ir::ValueLabelAssignments::Starts(vec![ValueLabelStart {
-                from: SourceLoc::new(3),
+                from: RelSourceLoc::new(3),
                 label: ValueLabel::new(1),
             }]),
         );
         pos.func.dfg.values_labels.as_mut().unwrap().insert(
             v3,
             crate::ir::ValueLabelAssignments::Starts(vec![ValueLabelStart {
-                from: SourceLoc::new(4),
+                from: RelSourceLoc::new(4),
                 label: ValueLabel::new(1),
             }]),
         );
         pos.func.dfg.values_labels.as_mut().unwrap().insert(
             v4,
             crate::ir::ValueLabelAssignments::Starts(vec![ValueLabelStart {
-                from: SourceLoc::new(5),
+                from: RelSourceLoc::new(5),
                 label: ValueLabel::new(1),
             }]),
         );
@@ -371,7 +385,7 @@ mod test {
     // expands during emission.
     #[test]
     fn br_table() {
-        let name = ExternalName::testcase("test0");
+        let name = UserFuncName::testcase("test0");
         let mut sig = Signature::new(CallConv::SystemV);
         sig.params.push(AbiParam::new(I32));
         sig.returns.push(AbiParam::new(I32));
@@ -421,37 +435,34 @@ mod test {
 
         // 00000000  55                push rbp
         // 00000001  4889E5            mov rbp,rsp
-        // 00000004  41B900000000      mov r9d,0x0
-        // 0000000A  83FF02            cmp edi,byte +0x2
-        // 0000000D  0F8320000000      jnc near 0x33
-        // 00000013  8BF7              mov esi,edi
-        // 00000015  490F43F1          cmovnc rsi,r9
-        // 00000019  4C8D0D0B000000    lea r9,[rel 0x2b]
-        // 00000020  496374B100        movsxd rsi,dword [r9+rsi*4+0x0]
-        // 00000025  4901F1            add r9,rsi
-        // 00000028  41FFE1            jmp r9
-        // 0000002B  1200              adc al,[rax]
-        // 0000002D  0000              add [rax],al
-        // 0000002F  1C00              sbb al,0x0
-        // 00000031  0000              add [rax],al
-        // 00000033  B803000000        mov eax,0x3
-        // 00000038  4889EC            mov rsp,rbp
-        // 0000003B  5D                pop rbp
-        // 0000003C  C3                ret
-        // 0000003D  B801000000        mov eax,0x1
-        // 00000042  4889EC            mov rsp,rbp
-        // 00000045  5D                pop rbp
-        // 00000046  C3                ret
-        // 00000047  B802000000        mov eax,0x2
-        // 0000004C  4889EC            mov rsp,rbp
-        // 0000004F  5D                pop rbp
-        // 00000050  C3                ret
+        // 00000004  83FF02            cmp edi,byte +0x2
+        // 00000007  0F8327000000      jnc near 0x34
+        // 0000000D  448BDF            mov r11d,edi
+        // 00000010  41BA00000000      mov r10d,0x0
+        // 00000016  4D0F43DA          cmovnc r11,r10
+        // 0000001A  4C8D150B000000    lea r10,[rel 0x2c]
+        // 00000021  4F635C9A00        movsxd r11,dword [r10+r11*4+0x0]
+        // 00000026  4D01DA            add r10,r11
+        // 00000029  41FFE2            jmp r10
+        // 0000002C  120000001C000000  (jumptable data)
+        // 00000034  B803000000        mov eax,0x3
+        // 00000039  4889EC            mov rsp,rbp
+        // 0000003C  5D                pop rbp
+        // 0000003D  C3                ret
+        // 0000003E  B801000000        mov eax,0x1
+        // 00000043  4889EC            mov rsp,rbp
+        // 00000046  5D                pop rbp
+        // 00000047  C3                ret
+        // 00000048  B802000000        mov eax,0x2
+        // 0000004D  4889EC            mov rsp,rbp
+        // 00000050  5D                pop rbp
+        // 00000051  C3                ret
 
         let golden = vec![
-            85, 72, 137, 229, 65, 185, 0, 0, 0, 0, 131, 255, 2, 15, 131, 32, 0, 0, 0, 139, 247, 73,
-            15, 67, 241, 76, 141, 13, 11, 0, 0, 0, 73, 99, 116, 177, 0, 73, 1, 241, 65, 255, 225,
-            18, 0, 0, 0, 28, 0, 0, 0, 184, 3, 0, 0, 0, 72, 137, 236, 93, 195, 184, 1, 0, 0, 0, 72,
-            137, 236, 93, 195, 184, 2, 0, 0, 0, 72, 137, 236, 93, 195,
+            85, 72, 137, 229, 131, 255, 2, 15, 131, 39, 0, 0, 0, 68, 139, 223, 65, 186, 0, 0, 0, 0,
+            77, 15, 67, 218, 76, 141, 21, 11, 0, 0, 0, 79, 99, 92, 154, 0, 77, 1, 218, 65, 255,
+            226, 18, 0, 0, 0, 28, 0, 0, 0, 184, 3, 0, 0, 0, 72, 137, 236, 93, 195, 184, 1, 0, 0, 0,
+            72, 137, 236, 93, 195, 184, 2, 0, 0, 0, 72, 137, 236, 93, 195,
         ];
 
         assert_eq!(code, &golden[..]);

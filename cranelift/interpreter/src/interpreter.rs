@@ -12,10 +12,11 @@ use crate::value::{Value, ValueError};
 use cranelift_codegen::data_value::DataValue;
 use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
 use cranelift_codegen::ir::{
-    ArgumentPurpose, Block, FuncRef, Function, GlobalValue, GlobalValueData, Heap, StackSlot, Type,
-    Value as ValueRef,
+    ArgumentPurpose, Block, FuncRef, Function, GlobalValue, GlobalValueData, Heap, LibCall,
+    StackSlot, TrapCode, Type, Value as ValueRef,
 };
 use log::trace;
+use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -191,9 +192,13 @@ pub enum HeapInit {
     FromBacking(HeapBacking),
 }
 
+pub type LibCallValues<V> = SmallVec<[V; 1]>;
+pub type LibCallHandler<V> = fn(LibCall, LibCallValues<V>) -> Result<LibCallValues<V>, TrapCode>;
+
 /// Maintains the [Interpreter]'s state, implementing the [State] trait.
 pub struct InterpreterState<'a> {
     pub functions: FunctionStore<'a>,
+    pub libcall_handler: LibCallHandler<DataValue>,
     pub frame_stack: Vec<Frame<'a>>,
     /// Number of bytes from the bottom of the stack where the current frame's stack space is
     pub frame_offset: usize,
@@ -201,18 +206,21 @@ pub struct InterpreterState<'a> {
     pub heaps: Vec<HeapBacking>,
     pub iflags: HashSet<IntCC>,
     pub fflags: HashSet<FloatCC>,
+    pub pinned_reg: DataValue,
 }
 
 impl Default for InterpreterState<'_> {
     fn default() -> Self {
         Self {
             functions: FunctionStore::default(),
+            libcall_handler: |_, _| Err(TrapCode::UnreachableCodeReached),
             frame_stack: vec![],
             frame_offset: 0,
             stack: Vec::with_capacity(1024),
             heaps: Vec::new(),
             iflags: HashSet::new(),
             fflags: HashSet::new(),
+            pinned_reg: DataValue::U64(0),
         }
     }
 }
@@ -220,6 +228,12 @@ impl Default for InterpreterState<'_> {
 impl<'a> InterpreterState<'a> {
     pub fn with_function_store(self, functions: FunctionStore<'a>) -> Self {
         Self { functions, ..self }
+    }
+
+    /// Registers a libcall handler
+    pub fn with_libcall_handler(mut self, handler: LibCallHandler<DataValue>) -> Self {
+        self.libcall_handler = handler;
+        self
     }
 
     /// Registers a static heap and returns a reference to it
@@ -297,6 +311,10 @@ impl<'a> State<'a, DataValue> for InterpreterState<'a> {
     }
     fn get_current_function(&self) -> &'a Function {
         self.current_frame().function
+    }
+
+    fn get_libcall_handler(&self) -> LibCallHandler<DataValue> {
+        self.libcall_handler
     }
 
     fn push_frame(&mut self, function: &'a Function) {
@@ -492,7 +510,7 @@ impl<'a> State<'a, DataValue> for InterpreterState<'a> {
 
         // We start with a sentinel value that will fail if we try to load / add to it
         // without resolving the base GV First.
-        let mut current_val = DataValue::B(false);
+        let mut current_val = DataValue::I8(0);
         let mut action_stack = vec![ResolveAction::Resolve(gv)];
 
         loop {
@@ -592,9 +610,17 @@ impl<'a> State<'a, DataValue> for InterpreterState<'a> {
                 }
             }
             _ => unimplemented!(),
-        }
+        };
 
         Ok(())
+    }
+
+    fn get_pinned_reg(&self) -> DataValue {
+        self.pinned_reg.clone()
+    }
+
+    fn set_pinned_reg(&mut self, v: DataValue) {
+        self.pinned_reg = v;
     }
 }
 
@@ -602,16 +628,18 @@ impl<'a> State<'a, DataValue> for InterpreterState<'a> {
 mod tests {
     use super::*;
     use crate::step::CraneliftTrap;
+    use cranelift_codegen::ir::immediates::Ieee32;
     use cranelift_codegen::ir::types::I64;
     use cranelift_codegen::ir::TrapCode;
     use cranelift_reader::parse_functions;
+    use smallvec::smallvec;
 
     // Most interpreter tests should use the more ergonomic `test interpret` filetest but this
     // unit test serves as a sanity check that the interpreter still works without all of the
     // filetest infrastructure.
     #[test]
     fn sanity() {
-        let code = "function %test() -> b1 {
+        let code = "function %test() -> i8 {
         block0:
             v0 = iconst.i32 1
             v1 = iadd_imm v0, 1
@@ -629,7 +657,7 @@ mod tests {
             .unwrap()
             .unwrap_return();
 
-        assert_eq!(result, vec![DataValue::B(true)])
+        assert_eq!(result, vec![DataValue::I8(1)])
     }
 
     // We don't have a way to check for traps with the current filetest infrastructure
@@ -712,7 +740,7 @@ mod tests {
     #[test]
     fn state_flags() {
         let mut state = InterpreterState::default();
-        let flag = IntCC::Overflow;
+        let flag = IntCC::UnsignedLessThan;
         assert!(!state.has_iflag(flag));
         state.set_iflag(flag);
         assert!(state.has_iflag(flag));
@@ -722,7 +750,7 @@ mod tests {
 
     #[test]
     fn fuel() {
-        let code = "function %test() -> b1 {
+        let code = "function %test() -> i8 {
         block0:
             v0 = iconst.i32 1
             v1 = iadd_imm v0, 1
@@ -972,7 +1000,7 @@ mod tests {
     #[test]
     fn heap_sanity_test() {
         let code = "
-        function %heap_load_store(i64 vmctx) -> b1 {
+        function %heap_load_store(i64 vmctx) -> i8 {
             gv0 = vmctx
             gv1 = load.i64 notrap aligned gv0+0
             ; gv2/3 do nothing, but makes sure we understand the iadd_imm mechanism
@@ -1011,7 +1039,7 @@ mod tests {
             .unwrap()
             .unwrap_return();
 
-        assert_eq!(result, vec![DataValue::B(true)])
+        assert_eq!(result, vec![DataValue::I8(1)])
     }
 
     #[test]
@@ -1034,5 +1062,35 @@ mod tests {
             .unwrap_trap();
 
         assert_eq!(trap, CraneliftTrap::User(TrapCode::IntegerOverflow));
+    }
+
+    #[test]
+    fn libcall() {
+        let code = "function %test() -> i64 {
+            fn0 = colocated %CeilF32 (f32) -> f32 fast
+        block0:
+            v1 = f32const 0x0.5
+            v2 = call fn0(v1)
+            return v2
+        }";
+
+        let func = parse_functions(code).unwrap().into_iter().next().unwrap();
+        let mut env = FunctionStore::default();
+        env.add(func.name.to_string(), &func);
+        let state = InterpreterState::default()
+            .with_function_store(env)
+            .with_libcall_handler(|libcall, args| {
+                Ok(smallvec![match (libcall, &args[..]) {
+                    (LibCall::CeilF32, [DataValue::F32(a)]) => DataValue::F32(a.ceil()),
+                    _ => panic!("Unexpected args"),
+                }])
+            });
+
+        let result = Interpreter::new(state)
+            .call_by_name("%test", &[])
+            .unwrap()
+            .unwrap_return();
+
+        assert_eq!(result, vec![DataValue::F32(Ieee32::with_float(1.0))])
     }
 }

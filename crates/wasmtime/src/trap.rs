@@ -5,7 +5,6 @@ use std::fmt;
 use std::sync::Arc;
 use wasmtime_environ::{EntityRef, FilePos, TrapCode as EnvTrapCode};
 use wasmtime_jit::{demangle_function_name, demangle_function_name_or_index};
-use wasmtime_runtime::Backtrace;
 
 /// A struct representing an aborted instruction execution, with a message
 /// indicating the cause.
@@ -145,19 +144,24 @@ impl fmt::Display for TrapCode {
 #[derive(Debug)]
 pub(crate) struct TrapBacktrace {
     wasm_trace: Vec<FrameInfo>,
-    native_trace: Backtrace,
+    runtime_trace: wasmtime_runtime::Backtrace,
     hint_wasm_backtrace_details_env: bool,
 }
 
 impl TrapBacktrace {
-    pub fn new(store: &StoreOpaque, native_trace: Backtrace, trap_pc: Option<usize>) -> Self {
-        let mut wasm_trace = Vec::<FrameInfo>::new();
+    pub fn new(
+        store: &StoreOpaque,
+        runtime_trace: wasmtime_runtime::Backtrace,
+        trap_pc: Option<usize>,
+    ) -> Self {
+        let mut wasm_trace = Vec::<FrameInfo>::with_capacity(runtime_trace.frames().len());
         let mut hint_wasm_backtrace_details_env = false;
         let wasm_backtrace_details_env_used =
             store.engine().config().wasm_backtrace_details_env_used;
 
-        for frame in native_trace.frames() {
+        for frame in runtime_trace.frames() {
             debug_assert!(frame.pc() != 0);
+
             // Note that we need to be careful about the pc we pass in
             // here to lookup frame information. This program counter is
             // used to translate back to an original source location in
@@ -173,6 +177,31 @@ impl TrapBacktrace {
             } else {
                 frame.pc() - 1
             };
+
+            // NB: The PC we are looking up _must_ be a Wasm PC since
+            // `wasmtime_runtime::Backtrace` only contains Wasm frames.
+            //
+            // However, consider the case where we have multiple, nested calls
+            // across stores (with host code in between, by necessity, since
+            // only things in the same store can be linked directly together):
+            //
+            //     | ...             |
+            //     | Host            |  |
+            //     +-----------------+  | stack
+            //     | Wasm in store A |  | grows
+            //     +-----------------+  | down
+            //     | Host            |  |
+            //     +-----------------+  |
+            //     | Wasm in store B |  V
+            //     +-----------------+
+            //
+            // In this scenario, the `wasmtime_runtime::Backtrace` will contain
+            // two frames: Wasm in store B followed by Wasm in store A. But
+            // `store.modules()` will only have the module information for
+            // modules instantiated within this store. Therefore, we use `if let
+            // Some(..)` instead of the `unwrap` you might otherwise expect and
+            // we ignore frames from modules that were not registered in this
+            // store's module registry.
             if let Some((info, module)) = store.modules().lookup_frame_info(pc_to_lookup) {
                 wasm_trace.push(info);
 
@@ -191,7 +220,7 @@ impl TrapBacktrace {
 
         Self {
             wasm_trace,
-            native_trace,
+            runtime_trace,
             hint_wasm_backtrace_details_env,
         }
     }
@@ -208,7 +237,9 @@ fn _assert_trap_is_sync_and_send(t: &Trap) -> (&dyn Sync, &dyn Send) {
 
 impl Trap {
     /// Creates a new `Trap` with `message`.
+    ///
     /// # Example
+    ///
     /// ```
     /// let trap = wasmtime::Trap::new("unexpected error");
     /// assert!(trap.to_string().contains("unexpected error"));
@@ -226,6 +257,15 @@ impl Trap {
         Trap::new_with_trace(TrapReason::I32Exit(status), None)
     }
 
+    // Same safety requirements and caveats as
+    // `wasmtime_runtime::raise_user_trap`.
+    pub(crate) unsafe fn raise(error: anyhow::Error) -> ! {
+        let needs_backtrace = error
+            .downcast_ref::<Trap>()
+            .map_or(true, |trap| trap.trace().is_none());
+        wasmtime_runtime::raise_user_trap(error, needs_backtrace)
+    }
+
     #[cold] // see Trap::new
     pub(crate) fn from_runtime_box(
         store: &StoreOpaque,
@@ -238,9 +278,14 @@ impl Trap {
     pub(crate) fn from_runtime(store: &StoreOpaque, runtime_trap: wasmtime_runtime::Trap) -> Self {
         let wasmtime_runtime::Trap { reason, backtrace } = runtime_trap;
         match reason {
-            wasmtime_runtime::TrapReason::User(error) => {
+            wasmtime_runtime::TrapReason::User {
+                error,
+                needs_backtrace,
+            } => {
                 let trap = Trap::from(error);
                 if let Some(backtrace) = backtrace {
+                    debug_assert!(needs_backtrace);
+                    debug_assert!(trap.inner.backtrace.get().is_none());
                     trap.record_backtrace(TrapBacktrace::new(store, backtrace, None));
                 }
                 trap
@@ -333,12 +378,15 @@ impl Trap {
     fn record_backtrace(&self, backtrace: TrapBacktrace) {
         // When a trap is created on top of the wasm stack, the trampoline will
         // re-raise it via
-        // `wasmtime_runtime::raise_user_trap(trap.into::<Box<dyn Error>>())`
-        // after panic::catch_unwind. We don't want to overwrite the first
-        // backtrace recorded, as it is most precise.
-        // FIXME: make sure backtraces are only created once per trap! they are
-        // actually kinda expensive to create.
-        let _ = self.inner.backtrace.try_insert(backtrace);
+        // `wasmtime_runtime::raise_user_trap(trap.into::<Box<dyn Error>>(),
+        // ..)` after `panic::catch_unwind`. We don't want to overwrite the
+        // first backtrace recorded, as it is most precise. However, this should
+        // never happen in the first place because we thread `needs_backtrace`
+        // booleans throuch all calls to `raise_user_trap` to avoid capturing
+        // unnecessary backtraces! So debug assert that we don't ever capture
+        // unnecessary backtraces.
+        let result = self.inner.backtrace.try_insert(backtrace);
+        debug_assert!(result.is_ok());
     }
 }
 
@@ -348,7 +396,7 @@ impl fmt::Debug for Trap {
         f.field("reason", &self.inner.reason);
         if let Some(backtrace) = self.inner.backtrace.get() {
             f.field("wasm_trace", &backtrace.wasm_trace)
-                .field("native_trace", &backtrace.native_trace);
+                .field("runtime_trace", &backtrace.runtime_trace);
         }
         f.finish()
     }
