@@ -12,7 +12,7 @@ keywords = ["webassembly", "wasm"]
 edition.workspace = true
 
 [dependencies]
-wasmparser = { workspace = true }
+wasmparser = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations", default-features = false }
 cranelift-codegen = { workspace = true, default-features = false }
 cranelift-entity = { workspace = true }
 cranelift-frontend = { workspace = true, default-features = false }

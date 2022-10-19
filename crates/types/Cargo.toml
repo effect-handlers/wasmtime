@@ -12,4 +12,4 @@ edition.workspace = true
 cranelift-entity = { workspace = true, features = ['enable-serde'] }
 serde = { version = "1.0.94", features = ["derive"] }
 thiserror = "1.0.4"
-wasmparser = { workspace = true }
+wasmparser = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations", default-features = false }

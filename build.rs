@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
             // out.
             if spec_tests > 0 {
                 test_directory_module(out, "tests/spec_testsuite/proposals/memory64", strategy)?;
+                test_directory_module(out, "tests/spec_testsuite/proposals/function-references", strategy)?;
                 test_directory_module(
                     out,
                     "tests/spec_testsuite/proposals/multi-memory",

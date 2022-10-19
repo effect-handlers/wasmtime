@@ -30,9 +30,7 @@ pub fn type_to_type<PE: TargetEnvironment + ?Sized>(
         wasmparser::ValType::F32 => Ok(ir::types::F32),
         wasmparser::ValType::F64 => Ok(ir::types::F64),
         wasmparser::ValType::V128 => Ok(ir::types::I8X16),
-        wasmparser::ValType::ExternRef | wasmparser::ValType::FuncRef => {
-            Ok(environ.reference_type(ty.try_into()?))
-        }
+        wasmparser::ValType::Ref(rt) => Ok(environ.reference_type(rt.heap_type.try_into()?)), // TODO(dhil) fixme: verify this is indeed the right thing to do.
     }
 }
 
@@ -48,8 +46,14 @@ pub fn tabletype_to_type<PE: TargetEnvironment + ?Sized>(
         wasmparser::ValType::F32 => Ok(Some(ir::types::F32)),
         wasmparser::ValType::F64 => Ok(Some(ir::types::F64)),
         wasmparser::ValType::V128 => Ok(Some(ir::types::I8X16)),
-        wasmparser::ValType::ExternRef => Ok(Some(environ.reference_type(ty.try_into()?))),
-        wasmparser::ValType::FuncRef => Ok(None),
+        wasmparser::ValType::Ref(rt) => {
+            match rt.heap_type {
+                wasmparser::HeapType::Extern => {
+                    Ok(Some(environ.reference_type(rt.heap_type.try_into()?)))
+                }
+                _ => Ok(None), // TODO(dhil) fixme: verify this is indeed the right thing to do.
+            }
+        }
     }
 }
 
@@ -67,26 +71,20 @@ where
     return Ok(match ty {
         wasmparser::BlockType::Empty => {
             let params: &'static [wasmparser::ValType] = &[];
-            let results: &'static [wasmparser::ValType] = &[];
+            // If we care about not allocating, surely we can type munge more.
+            // But, it is midnight
+            let results: std::vec::Vec<wasmparser::ValType> = vec![];
             (
                 itertools::Either::Left(params.iter().copied()),
-                itertools::Either::Left(results.iter().copied()),
+                itertools::Either::Left(results.into_iter()),
             )
         }
         wasmparser::BlockType::Type(ty) => {
             let params: &'static [wasmparser::ValType] = &[];
-            let results: &'static [wasmparser::ValType] = match ty {
-                wasmparser::ValType::I32 => &[wasmparser::ValType::I32],
-                wasmparser::ValType::I64 => &[wasmparser::ValType::I64],
-                wasmparser::ValType::F32 => &[wasmparser::ValType::F32],
-                wasmparser::ValType::F64 => &[wasmparser::ValType::F64],
-                wasmparser::ValType::V128 => &[wasmparser::ValType::V128],
-                wasmparser::ValType::ExternRef => &[wasmparser::ValType::ExternRef],
-                wasmparser::ValType::FuncRef => &[wasmparser::ValType::FuncRef],
-            };
+            let results: std::vec::Vec<wasmparser::ValType> = vec![ty.clone()];
             (
                 itertools::Either::Left(params.iter().copied()),
-                itertools::Either::Left(results.iter().copied()),
+                itertools::Either::Left(results.into_iter()),
             )
         }
         wasmparser::BlockType::FuncType(ty_index) => {
@@ -123,8 +121,8 @@ pub fn block_with_params<PE: TargetEnvironment + ?Sized>(
             wasmparser::ValType::F64 => {
                 builder.append_block_param(block, ir::types::F64);
             }
-            wasmparser::ValType::ExternRef | wasmparser::ValType::FuncRef => {
-                builder.append_block_param(block, environ.reference_type(ty.try_into()?));
+            wasmparser::ValType::Ref(rt) => {
+                builder.append_block_param(block, environ.reference_type(rt.heap_type.try_into()?));
             }
             wasmparser::ValType::V128 => {
                 builder.append_block_param(block, ir::types::I8X16);

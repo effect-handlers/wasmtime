@@ -1043,8 +1043,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::F32Le | Operator::F64Le => {
             translate_fcmp(FloatCC::LessThanOrEqual, builder, state)
         }
-        Operator::RefNull { ty } => {
-            state.push1(environ.translate_ref_null(builder.cursor(), (*ty).try_into()?)?)
+        Operator::RefNull { hty } => {
+            state.push1(environ.translate_ref_null(builder.cursor(), (*hty).try_into()?)?)
         }
         Operator::RefIsNull => {
             let value = state.pop1();
@@ -2031,6 +2031,59 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         | Operator::F32x4RelaxedDotBf16x8AddF32x4 => {
             return Err(wasm_unsupported!("proposed relaxed-simd operator {:?}", op));
         }
+
+        // TODO(dhil) fixme: merge into the above list.
+        // Function references instructions
+        Operator::BrOnNonNull { .. } | Operator::ReturnCallRef { .. } => {
+            todo!("Implement Operator::[BrOnNull,BrOnNonNull,CallRef] for translate_operator")
+        } // TODO(dhil) fixme
+        Operator::BrOnNull { relative_depth } => {
+            let r = state.pop1();
+            let (br_destination, inputs) = translate_br_if_args(*relative_depth, state);
+            let is_null = environ.translate_ref_is_null(builder.cursor(), r)?;
+            canonicalise_then_brnz(builder, is_null, br_destination, inputs);
+
+            let next_block = builder.create_block();
+            canonicalise_then_jump(builder, next_block, &[]);
+            builder.seal_block(next_block); // The only predecessor is the current block.
+            builder.switch_to_block(next_block);
+            state.push1(r);
+        }
+        Operator::CallRef { hty } => {
+            // Get function signature
+            let index = match hty {
+                wasmparser::HeapType::TypedFunc(type_idx) => type_idx,
+                _ => panic!("expected typed func heap type"),
+            };
+            // `index` is the index of the function's signature and `table_index` is the index of
+            // the table to search the function in.
+            let (sigref, num_args) = state.get_indirect_sig(builder.func, u32::from(*index), environ)?;
+            //let table = state.get_or_create_table(builder.func, *table_index, environ)?;
+            let callee = state.pop1();
+
+            // Bitcast any vector arguments to their default type, I8X16, before calling.
+            let args = state.peekn_mut(num_args);
+            bitcast_wasm_params(environ, sigref, args, builder);
+
+            let call =
+                environ.translate_call_ref(builder, sigref, callee, state.peekn(num_args))?;
+
+            let inst_results = builder.inst_results(call);
+            debug_assert_eq!(
+                inst_results.len(),
+                builder.func.dfg.signatures[sigref].returns.len(),
+                "translate_call_ref results should match the call signature"
+            );
+            state.popn(num_args);
+            state.pushn(inst_results);
+        }
+        Operator::RefAsNonNull => {
+            let r = state.pop1();
+            let is_null = environ.translate_ref_is_null(builder.cursor(), r)?;
+            builder.ins().trapnz(is_null, ir::TrapCode::NullReference);
+            state.push1(r);
+        }
+        Operator::ContNew { type_index: _ } | Operator::ContBind { type_index: _  } | Operator::Resume { resumetable: _ } | Operator::ResumeThrow { tag_index: _, resumetable: _ } | Operator::Suspend { tag_index: _ } | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
     };
     Ok(())
 }

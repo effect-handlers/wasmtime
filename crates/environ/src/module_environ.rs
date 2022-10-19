@@ -227,7 +227,8 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     match ty? {
                         Type::Func(wasm_func_ty) => {
                             self.declare_type_func(wasm_func_ty.try_into()?)?;
-                        }
+                        },
+                        Type::Cont(_) => todo!("Store continuation type"),
                     }
                 }
             }
@@ -332,7 +333,7 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                         Operator::V128Const { value } => {
                             GlobalInit::V128Const(u128::from_le_bytes(*value.bytes()))
                         }
-                        Operator::RefNull { ty: _ } => GlobalInit::RefNullConst,
+                        Operator::RefNull { hty: _ } => GlobalInit::RefNullConst,
                         Operator::RefFunc { function_index } => {
                             let index = FuncIndex::from_u32(function_index);
                             self.flag_func_escaped(index);

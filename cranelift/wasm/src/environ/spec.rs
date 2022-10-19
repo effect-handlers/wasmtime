@@ -9,7 +9,7 @@
 use crate::state::FuncTranslationState;
 use crate::{
     DataIndex, ElemIndex, FuncIndex, Global, GlobalIndex, Memory, MemoryIndex, SignatureIndex,
-    Table, TableIndex, Tag, TagIndex, TypeIndex, WasmError, WasmFuncType, WasmResult, WasmType,
+    Table, TableIndex, Tag, TagIndex, TypeIndex, WasmError, WasmFuncType, WasmResult, WasmHeapType,
 };
 use core::convert::From;
 use cranelift_codegen::cursor::FuncCursor;
@@ -65,7 +65,7 @@ pub trait TargetEnvironment {
     /// 32-bit architectures. If you override this, then you should also
     /// override `FuncEnvironment::{translate_ref_null, translate_ref_is_null}`
     /// as well.
-    fn reference_type(&self, ty: WasmType) -> ir::Type {
+    fn reference_type(&self, ty: WasmHeapType) -> ir::Type {
         let _ = ty;
         match self.pointer_type() {
             ir::types::I32 => ir::types::R32,
@@ -193,6 +193,23 @@ pub trait FuncEnvironment: TargetEnvironment {
     ) -> WasmResult<ir::Inst> {
         Ok(pos.ins().call(callee, call_args))
     }
+
+    /// Translate a `call_ref` WebAssembly instruction at `pos`.
+    ///
+    /// Insert instructions at `pos` for an indirect call to the
+    /// function `callee`. The `callee` value will have type `Ref`. TODO
+    ///
+    /// The signature `sig_ref` was previously created by `make_indirect_sig()`.
+    ///
+    /// Return the call instruction whose results are the WebAssembly return values.
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
+    fn translate_call_ref(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        sig_ref: ir::SigRef,
+        callee: ir::Value,
+        call_args: &[ir::Value],
+    ) -> WasmResult<ir::Inst>;
 
     /// Translate a `memory.grow` WebAssembly instruction.
     ///
@@ -359,7 +376,7 @@ pub trait FuncEnvironment: TargetEnvironment {
     /// null sentinel is not a null reference type pointer for your type. If you
     /// override this method, then you should also override
     /// `translate_ref_is_null` as well.
-    fn translate_ref_null(&mut self, mut pos: FuncCursor, ty: WasmType) -> WasmResult<ir::Value> {
+    fn translate_ref_null(&mut self, mut pos: FuncCursor, ty: WasmHeapType) -> WasmResult<ir::Value> {
         let _ = ty;
         Ok(pos.ins().null(self.reference_type(ty)))
     }

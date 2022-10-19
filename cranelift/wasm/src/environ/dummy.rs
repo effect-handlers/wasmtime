@@ -266,7 +266,7 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
                 WasmType::F32 => ir::types::F32,
                 WasmType::F64 => ir::types::F64,
                 WasmType::V128 => ir::types::I8X16,
-                WasmType::FuncRef | WasmType::ExternRef => ir::types::R64,
+                WasmType::Ref(_) => ir::types::R64, // TODO(dhil) fixme: verify this is indeed the correct thing to do.
             },
         })
     }
@@ -445,6 +445,16 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         args.push(vmctx, &mut pos.func.dfg.value_lists);
 
         Ok(pos.ins().Call(ir::Opcode::Call, INVALID, callee, args).0)
+    }
+
+    fn translate_call_ref(
+        &mut self,
+        _builder: &mut FunctionBuilder,
+        _sig_ref: ir::SigRef,
+        _callee: ir::Value,
+        _call_args: &[ir::Value],
+    ) -> WasmResult<ir::Inst> {
+        todo!("Implement dummy translate_call_ref")
     }
 
     fn translate_memory_grow(
@@ -666,7 +676,7 @@ impl<'data> ModuleEnvironment<'data> for DummyEnvironment {
                 WasmType::F32 => ir::types::F32,
                 WasmType::F64 => ir::types::F64,
                 WasmType::V128 => ir::types::I8X16,
-                WasmType::FuncRef | WasmType::ExternRef => reference_type,
+                WasmType::Ref(_) => reference_type, // TODO(dhil) fixme: verify this is indeed the correct thing to do.
             })
         };
         sig.params.extend(wasm.params().iter().map(&mut cvt));

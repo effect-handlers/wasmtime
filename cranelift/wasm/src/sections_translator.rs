@@ -41,7 +41,7 @@ fn tag(e: TagType) -> Tag {
     match e.kind {
         wasmparser::TagKind::Exception => Tag {
             ty: TypeIndex::from_u32(e.func_type_idx),
-        },
+        }
     }
 }
 
@@ -80,6 +80,7 @@ pub fn parse_type_section<'a>(
                     wasm_func_ty.results().to_vec().into(),
                 ));
             }
+            Type::Cont(_) => todo!("Implement Type::Cont in parse_type_section"),
         }
     }
     Ok(())
@@ -207,7 +208,7 @@ pub fn parse_global_section(
             Operator::V128Const { value } => {
                 GlobalInit::V128Const(u128::from_le_bytes(*value.bytes()))
             }
-            Operator::RefNull { ty: _ } => GlobalInit::RefNullConst,
+            Operator::RefNull { hty: _ } => GlobalInit::RefNullConst,
             Operator::RefFunc { function_index } => {
                 GlobalInit::RefFunc(FuncIndex::from_u32(function_index))
             }

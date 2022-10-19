@@ -109,6 +109,7 @@ pub struct Config {
     pub(crate) memory_init_cow: bool,
     pub(crate) memory_guaranteed_dense_image_size: u64,
     pub(crate) force_memory_init_memfd: bool,
+    pub(crate) function_references: bool,
     pub(crate) async_stack_zeroing: bool,
 }
 
@@ -197,6 +198,7 @@ impl Config {
             memory_init_cow: true,
             memory_guaranteed_dense_image_size: 16 << 20,
             force_memory_init_memfd: false,
+            function_references: false,
             async_stack_zeroing: false,
         };
         #[cfg(compiler)]
@@ -205,6 +207,7 @@ impl Config {
             ret.cranelift_opt_level(OptLevel::Speed);
         }
         ret.wasm_reference_types(true);
+        ret.wasm_function_references(true);
         ret.wasm_multi_value(true);
         ret.wasm_bulk_memory(true);
         ret.wasm_simd(true);
@@ -677,6 +680,12 @@ impl Config {
     /// [proposal]: https://github.com/webassembly/reference-types
     pub fn wasm_reference_types(&mut self, enable: bool) -> &mut Self {
         self.features.reference_types = enable;
+        self
+    }
+
+    /// TODO: write doc
+    pub fn wasm_function_references(&mut self, enable: bool) -> &mut Self {
+        self.features.function_references = enable;
         self
     }
 
@@ -1595,6 +1604,10 @@ impl fmt::Debug for Config {
             .field("parse_wasm_debuginfo", &self.tunables.parse_wasm_debuginfo)
             .field("wasm_threads", &self.features.threads)
             .field("wasm_reference_types", &self.features.reference_types)
+            .field(
+                "wasm_function_references",
+                &self.features.function_references,
+            )
             .field("wasm_bulk_memory", &self.features.bulk_memory)
             .field("wasm_simd", &self.features.simd)
             .field("wasm_multi_value", &self.features.multi_value)

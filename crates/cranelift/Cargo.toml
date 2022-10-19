@@ -19,7 +19,7 @@ cranelift-codegen = { workspace = true }
 cranelift-frontend = { workspace = true }
 cranelift-entity = { workspace = true }
 cranelift-native = { workspace = true }
-wasmparser = { workspace = true }
+wasmparser = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations" }
 target-lexicon = { workspace = true }
 gimli = { workspace = true }
 object = { workspace = true, features = ['write'] }

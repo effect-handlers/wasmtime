@@ -69,6 +69,8 @@ struct WasmFeatures {
     pub memory64: bool,
     pub relaxed_simd: bool,
     pub extended_const: bool,
+    pub function_references: bool,
+    pub typed_continuations: bool,
 }
 
 impl From<&wasmparser::WasmFeatures> for WasmFeatures {
@@ -87,6 +89,8 @@ impl From<&wasmparser::WasmFeatures> for WasmFeatures {
             memory64,
             relaxed_simd,
             extended_const,
+            function_references,
+            typed_continuations,
 
             // Always on; we don't currently have knobs for these.
             mutable_global: _,
@@ -108,6 +112,8 @@ impl From<&wasmparser::WasmFeatures> for WasmFeatures {
             memory64,
             relaxed_simd,
             extended_const,
+            function_references,
+            typed_continuations,
         }
     }
 }
@@ -492,6 +498,8 @@ impl<'a> SerializedModule<'a> {
             memory64,
             relaxed_simd,
             extended_const,
+            function_references,
+            typed_continuations,
         } = self.metadata.features;
 
         Self::check_bool(
@@ -547,6 +555,14 @@ impl<'a> SerializedModule<'a> {
             other.relaxed_simd,
             "WebAssembly relaxed-simd support",
         )?;
+        Self::check_bool(
+            function_references,
+            other.function_references,
+            "WebAssembly typeful references support")?;
+        Self::check_bool(
+            typed_continuations,
+            other.typed_continuations,
+            "WebAssembly typed continuations support")?;
 
         Ok(())
     }

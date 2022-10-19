@@ -1259,7 +1259,10 @@ impl<'a> Verifier<'a> {
                 errors.report((
                     inst,
                     self.context(inst),
-                    format!("has an invalid controlling type {}", ctrl_type),
+                    format!(
+                        "has an invalid controlling type {} (allowed set is {:?})",
+                        ctrl_type, value_typeset
+                    ),
                 ));
             }
 

@@ -494,6 +494,7 @@ impl ComponentTypesBuilder {
                         TypeDef::CoreFunc(self.module_types.wasm_func_type(f.clone().try_into()?));
                     self.push_core_typedef(ty);
                 }
+                wasmparser::ModuleTypeDeclaration::Type(wasmparser::Type::Cont(_)) => todo!(), // TODO(dhil): implement module_type for Type::Cont
                 wasmparser::ModuleTypeDeclaration::Export { name, ty } => {
                     let prev = result
                         .exports
