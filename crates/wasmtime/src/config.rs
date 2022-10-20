@@ -109,7 +109,6 @@ pub struct Config {
     pub(crate) memory_init_cow: bool,
     pub(crate) memory_guaranteed_dense_image_size: u64,
     pub(crate) force_memory_init_memfd: bool,
-    pub(crate) function_references: bool,
     pub(crate) async_stack_zeroing: bool,
 }
 
@@ -198,7 +197,6 @@ impl Config {
             memory_init_cow: true,
             memory_guaranteed_dense_image_size: 16 << 20,
             force_memory_init_memfd: false,
-            function_references: false,
             async_stack_zeroing: false,
         };
         #[cfg(compiler)]
@@ -686,6 +684,12 @@ impl Config {
     /// TODO: write doc
     pub fn wasm_function_references(&mut self, enable: bool) -> &mut Self {
         self.features.function_references = enable;
+        self
+    }
+
+    /// TODO: write doc
+    pub fn wasm_typed_continuations(&mut self, enable: bool) -> &mut Self {
+        self.features.typed_continuations = enable;
         self
     }
 

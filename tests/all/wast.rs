@@ -25,12 +25,14 @@ fn run_wast(wast: &str, strategy: Strategy, pooling: bool) -> anyhow::Result<()>
     let multi_memory = feature_found(wast, "multi-memory");
     let threads = feature_found(wast, "threads");
     let function_references = feature_found(wast, "function-references");
+    let typed_continuations = feature_found(wast, "cont.wast");
 
     let mut cfg = Config::new();
     cfg.wasm_multi_memory(multi_memory)
         .wasm_threads(threads)
         .wasm_memory64(memory64)
-        .wasm_function_references(function_references)
+        .wasm_function_references(function_references || typed_continuations)
+        .wasm_typed_continuations(typed_continuations)
         .cranelift_debug_verifier(true);
 
     cfg.wasm_component_model(feature_found(wast, "component-model"));

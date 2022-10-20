@@ -3262,6 +3262,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.18.0"
+source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations#a7e052e9f2d99f4d301518e3cc3e934e5a622e3f"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
 name = "wasm-mutate"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3271,7 +3279,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "thiserror",
- "wasm-encoder",
+ "wasm-encoder 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasmparser 0.92.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -3285,7 +3293,7 @@ dependencies = [
  "flagset",
  "indexmap",
  "leb128",
- "wasm-encoder",
+ "wasm-encoder 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasmparser 0.92.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -3489,7 +3497,7 @@ dependencies = [
  "wasmtime-wasi-crypto",
  "wasmtime-wasi-nn",
  "wasmtime-wast",
- "wast 47.0.1",
+ "wast 47.0.1 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wat",
  "windows-sys",
 ]
@@ -3555,7 +3563,7 @@ dependencies = [
  "serde",
  "target-lexicon",
  "thiserror",
- "wasm-encoder",
+ "wasm-encoder 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasmparser 0.92.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmprinter",
  "wasmtime-component-util",
@@ -3571,7 +3579,7 @@ dependencies = [
  "component-fuzz-util",
  "env_logger 0.9.1",
  "libfuzzer-sys",
- "wasmparser 0.92.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmparser 0.92.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmprinter",
  "wasmtime-environ",
  "wat",
@@ -3629,12 +3637,12 @@ dependencies = [
  "target-lexicon",
  "tempfile",
  "v8",
- "wasm-encoder",
+ "wasm-encoder 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasm-mutate",
  "wasm-smith",
  "wasm-spec-interpreter",
  "wasmi",
- "wasmparser 0.92.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasmparser 0.92.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmprinter",
  "wasmtime",
  "wasmtime-wast",
@@ -3758,7 +3766,7 @@ dependencies = [
  "anyhow",
  "log",
  "wasmtime",
- "wast 47.0.1",
+ "wast 47.0.1 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
 ]
 
 [[package]]
@@ -3779,7 +3787,18 @@ dependencies = [
  "leb128",
  "memchr",
  "unicode-width",
- "wasm-encoder",
+ "wasm-encoder 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "wast"
+version = "47.0.1"
+source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations#a7e052e9f2d99f4d301518e3cc3e934e5a622e3f"
+dependencies = [
+ "leb128",
+ "memchr",
+ "unicode-width",
+ "wasm-encoder 0.18.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
 ]
 
 [[package]]
@@ -3788,7 +3807,7 @@ version = "1.0.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7aab4e20c60429fbba9670a6cae0fff9520046ba0aa3e6d0b1cd2653bea14898"
 dependencies = [
- "wast 47.0.1",
+ "wast 47.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

@@ -463,6 +463,7 @@ impl<T> WastContext<T> {
                 }
             }
             AssertException { .. } => bail!("unimplemented assert_exception"),
+            AssertSuspension { .. } => bail!("unimplemented assert_exception"),
         }
 
         Ok(())

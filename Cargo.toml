@@ -148,9 +148,9 @@ cranelift = { path = "cranelift/umbrella", version = "0.90.0" }
 
 target-lexicon = { version = "0.12.3", default-features = false }
 anyhow = "1.0.22"
-wasmparser = "0.92.0"
+wasmparser = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations" }
 wat = "1.0.49"
-wast = "47.0.1"
+wast = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations" }
 wasmprinter = "0.2.41"
 wasm-encoder = "0.18.0"
 wasm-smith = "0.11.6"
