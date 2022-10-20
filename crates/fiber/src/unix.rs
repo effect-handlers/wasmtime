@@ -99,6 +99,7 @@ impl Drop for FiberStack {
     }
 }
 
+#[derive(Debug)]
 pub struct Fiber;
 
 pub struct Suspend(*mut u8);

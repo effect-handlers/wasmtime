@@ -1308,6 +1308,22 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         Ok(pos.func.dfg.first_result(call_inst))
     }
 
+    fn translate_cont_new(
+        &mut self,
+        mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
+        func: ir::Value,
+    ) -> WasmResult<ir::Value> {
+        let builtin_index = BuiltinFunctionIndex::cont_new();
+        let builtin_sig = self.builtin_function_signatures.cont_new(&mut pos.func);
+        let (vmctx, builtin_addr) =
+            self.translate_load_builtin_function_address(&mut pos, builtin_index);
+
+        let call_inst = pos
+            .ins()
+            .call_indirect(builtin_sig, builtin_addr, &[vmctx, func]);
+        Ok(pos.func.dfg.first_result(call_inst))
+    }
+
     fn translate_custom_global_get(
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,

@@ -58,13 +58,14 @@ use crate::externref::VMExternRef;
 use crate::instance::Instance;
 use crate::table::{Table, TableElementType};
 use crate::vmcontext::{VMCallerCheckedAnyfunc, VMContext};
-use crate::TrapReason;
+use crate::{prepare_host_to_wasm_trampoline, TrapReason, VMFunctionBody, VMOpaqueContext};
 use anyhow::Result;
 use std::mem;
 use std::ptr::{self, NonNull};
 use wasmtime_environ::{
     DataIndex, ElemIndex, FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TrapCode,
 };
+use wasmtime_fiber::{Fiber, FiberStack, Suspend};
 
 /// Actually public trampolines which are used by the runtime as the entrypoint
 /// for libcalls.
@@ -342,6 +343,27 @@ unsafe fn ref_func(vmctx: *mut VMContext, func_index: u32) -> *mut u8 {
         .get_caller_checked_anyfunc(FuncIndex::from_u32(func_index))
         .expect("ref_func: caller_checked_anyfunc should always be available for given func index");
     anyfunc as *mut _
+}
+
+// Implementation of `cont.new`.
+unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
+    let func = func as *mut VMCallerCheckedAnyfunc;
+    let fiber = Box::new(
+        Fiber::new(
+            FiberStack::new(4096).unwrap(),
+            move |first_resumption: (), suspend: &Suspend<_, (), _>| {
+                let trampoline = mem::transmute::<
+                    *const VMFunctionBody,
+                    unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
+                >((*func).func_ptr.as_ptr());
+                let trampoline = prepare_host_to_wasm_trampoline(vmctx, trampoline);
+                trampoline((*func).vmctx, vmctx)
+            },
+        )
+        .unwrap(),
+    );
+    let ptr: *mut Fiber<'static, (), (), ()> = Box::into_raw(fiber);
+    ptr as *mut _
 }
 
 // Implementation of `data.drop`.

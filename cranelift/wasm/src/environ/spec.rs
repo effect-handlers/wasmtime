@@ -177,6 +177,9 @@ pub trait FuncEnvironment: TargetEnvironment {
         call_args: &[ir::Value],
     ) -> WasmResult<ir::Inst>;
 
+    /// Doc
+    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value>;
+
     /// Translate a `call` WebAssembly instruction at `pos`.
     ///
     /// Insert instructions at `pos` for a direct call to the function `callee_index`.

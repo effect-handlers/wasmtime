@@ -2084,7 +2084,18 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             builder.ins().trapnz(is_null, ir::TrapCode::NullReference);
             state.push1(r);
         }
-        Operator::ContNew { type_index: _ } | Operator::ContBind { type_index: _  } | Operator::Resume { resumetable: _ } | Operator::ResumeThrow { tag_index: _, resumetable: _ } | Operator::Suspend { tag_index: _ } | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
+        Operator::ContNew { type_index: _ } => {
+            let r = state.pop1();
+            state.push1(environ.translate_cont_new(builder.cursor(), r)?);
+        }
+        Operator::ContBind { type_index: _ }
+        | Operator::Resume { resumetable: _ }
+        | Operator::ResumeThrow {
+            tag_index: _,
+            resumetable: _,
+        }
+        | Operator::Suspend { tag_index: _ }
+        | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
     };
     Ok(())
 }
