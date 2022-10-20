@@ -16,7 +16,7 @@
 //!
 //! - the loads and stores need the memory base address;
 //! - the `get_global` and `set_global` instructions depend on how the globals are implemented;
-//! - `memory.size` and `memory.grow` are runtime functions;
+//! - `memory.size`[citation needed] and `memory.grow` are runtime functions;
 //! - `call_indirect` has to translate the function index into the address of where this
 //!    is;
 //!
@@ -2057,7 +2057,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             };
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.
-            let (sigref, num_args) = state.get_indirect_sig(builder.func, u32::from(*index), environ)?;
+            let (sigref, num_args) =
+                state.get_indirect_sig(builder.func, u32::from(*index), environ)?;
             //let table = state.get_or_create_table(builder.func, *table_index, environ)?;
             let callee = state.pop1();
 
