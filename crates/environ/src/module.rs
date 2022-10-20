@@ -755,6 +755,7 @@ impl Default for TableInitialization {
 #[allow(missing_docs)]
 pub enum ModuleType {
     Function(SignatureIndex),
+    Cont(TypeIndex),
 }
 
 impl ModuleType {
@@ -763,6 +764,7 @@ impl ModuleType {
     pub fn unwrap_function(&self) -> SignatureIndex {
         match self {
             ModuleType::Function(f) => *f,
+            ModuleType::Cont(_) => panic!("Not a function!"),
         }
     }
 }

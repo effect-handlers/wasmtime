@@ -227,8 +227,10 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                     match ty? {
                         Type::Func(wasm_func_ty) => {
                             self.declare_type_func(wasm_func_ty.try_into()?)?;
-                        },
-                        Type::Cont(_) => todo!("Store continuation type"),
+                        }
+                        Type::Cont(i) => {
+                            self.declare_type_cont(i)?;
+                        }
                     }
                 }
             }
@@ -755,6 +757,14 @@ and for re-adding support for interface types you can see this issue:
             .module
             .types
             .push(ModuleType::Function(sig_index));
+        Ok(())
+    }
+
+    fn declare_type_cont(&mut self, index: u32) -> WasmResult<()> {
+        self.result
+            .module
+            .types
+            .push(ModuleType::Cont(TypeIndex::from_u32(index)));
         Ok(())
     }
 
