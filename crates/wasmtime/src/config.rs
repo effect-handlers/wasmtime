@@ -688,6 +688,12 @@ impl Config {
     }
 
     /// TODO: write doc
+    pub fn wasm_exceptions(&mut self, enable: bool) -> &mut Self {
+        self.features.exceptions = enable;
+        self
+    }
+
+    /// TODO: write doc
     pub fn wasm_typed_continuations(&mut self, enable: bool) -> &mut Self {
         self.features.typed_continuations = enable;
         self

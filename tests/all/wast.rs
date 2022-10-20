@@ -32,6 +32,7 @@ fn run_wast(wast: &str, strategy: Strategy, pooling: bool) -> anyhow::Result<()>
         .wasm_threads(threads)
         .wasm_memory64(memory64)
         .wasm_function_references(function_references || typed_continuations)
+        .wasm_exceptions(typed_continuations)
         .wasm_typed_continuations(typed_continuations)
         .cranelift_debug_verifier(true);
 
