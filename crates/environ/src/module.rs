@@ -428,7 +428,12 @@ impl ModuleTranslation<'_> {
 
             // If this is not a funcref table, then we can't support a
             // pre-computed table of function indices.
-            if self.module.table_plans[segment.table_index].table.wasm_ty.heap_type == WasmHeapType::Func {
+            if self.module.table_plans[segment.table_index]
+                .table
+                .wasm_ty
+                .heap_type
+                == WasmHeapType::Func
+            {
                 leftovers.push(segment.clone());
                 continue;
             }
@@ -750,6 +755,7 @@ impl Default for TableInitialization {
 #[allow(missing_docs)]
 pub enum ModuleType {
     Function(SignatureIndex),
+    Cont(TypeIndex),
 }
 
 impl ModuleType {
@@ -758,6 +764,7 @@ impl ModuleType {
     pub fn unwrap_function(&self) -> SignatureIndex {
         match self {
             ModuleType::Function(f) => *f,
+            ModuleType::Cont(_) => panic!("Not a function!"),
         }
     }
 }
@@ -826,6 +833,9 @@ pub struct Module {
 
     /// WebAssembly global variables.
     pub globals: PrimaryMap<GlobalIndex, Global>,
+
+    /// WebAssembly typed continuations tags.
+    pub tags: PrimaryMap<TagIndex, FunctionType>,
 }
 
 /// Initialization routines for creating an instance, encompassing imports,
@@ -997,6 +1007,14 @@ impl Module {
     /// they escape yet.
     pub fn push_function(&mut self, signature: SignatureIndex) -> FuncIndex {
         self.functions.push(FunctionType {
+            signature,
+            anyfunc: AnyfuncIndex::reserved_value(),
+        })
+    }
+
+    /// Docccccccccc
+    pub fn push_tag(&mut self, signature: SignatureIndex) -> TagIndex {
+        self.tags.push(FunctionType {
             signature,
             anyfunc: AnyfuncIndex::reserved_value(),
         })

@@ -1,5 +1,8 @@
 use std::fmt;
-use wasmtime_environ::{EntityType, Global, Memory, ModuleTypes, Table, WasmFuncType, WasmType, WasmRefType, WasmHeapType};
+use wasmtime_environ::{
+    EntityType, Global, Memory, ModuleTypes, Table, WasmFuncType, WasmHeapType, WasmRefType,
+    WasmType,
+};
 
 pub(crate) mod matching;
 
@@ -103,27 +106,28 @@ pub struct RefType {
 
 impl fmt::Display for RefType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.heap_type {
-            HeapType::Extern => write!(f, "externref"),
-            HeapType::Func   => write!(f, "funcref"),
-            _ => {
-                if self.nullable {
-                    write!(f, "(ref null {})", self.heap_type)
-                } else {
-                    write!(f, "(ref {})", self.heap_type)
-                }
-            }
+        match self {
+            &EXTERN_REF => write!(f, "externref"),
+            &FUNC_REF => write!(f, "funcref"),
+            _ if self.nullable => write!(f, "(ref null {})", self.heap_type),
+            _ => write!(f, "(ref {})", self.heap_type),
         }
     }
 }
 
 impl RefType {
     pub(crate) fn to_wasm_ref_type(&self) -> WasmRefType {
-        WasmRefType { nullable: self.nullable, heap_type: HeapType::to_wasm_heap_type(&self.heap_type) }
+        WasmRefType {
+            nullable: self.nullable,
+            heap_type: HeapType::to_wasm_heap_type(&self.heap_type),
+        }
     }
 
     pub(crate) fn from_wasm_ref_type(rt: &WasmRefType) -> Self {
-        RefType { nullable: rt.nullable, heap_type: HeapType::from_wasm_heap_type(&rt.heap_type) }
+        RefType {
+            nullable: rt.nullable,
+            heap_type: HeapType::from_wasm_heap_type(&rt.heap_type),
+        }
     }
 }
 
@@ -147,7 +151,7 @@ impl fmt::Display for HeapType {
             Self::Func => write!(f, "func"),
             Self::Extern => write!(f, "extern"),
             Self::Index(i) => write!(f, "{}", i),
-            Self::Bot => write!(f, "bot")
+            Self::Bot => write!(f, "bot"),
         }
     }
 }
@@ -172,15 +176,14 @@ impl HeapType {
     }
 }
 
-// pub const EXTERN_REF : RefType = RefType {
-//     nullable: true,
-//     heap_type: HeapType::Extern,
-// };
-
-// pub const FUNC_REF : RefType = RefType {
-//     nullable: true,
-//     heap_type: HeapType::Func,
-// };
+const EXTERN_REF: RefType = RefType {
+    nullable: true,
+    heap_type: HeapType::Extern,
+};
+const FUNC_REF: RefType = RefType {
+    nullable: true,
+    heap_type: HeapType::Func,
+};
 
 // External Types
 /// A list of all possible types which can be externally referenced from a
