@@ -833,6 +833,9 @@ pub struct Module {
 
     /// WebAssembly global variables.
     pub globals: PrimaryMap<GlobalIndex, Global>,
+
+    /// WebAssembly typed continuations tags.
+    pub tags: PrimaryMap<TagIndex, FunctionType>,
 }
 
 /// Initialization routines for creating an instance, encompassing imports,
@@ -1004,6 +1007,14 @@ impl Module {
     /// they escape yet.
     pub fn push_function(&mut self, signature: SignatureIndex) -> FuncIndex {
         self.functions.push(FunctionType {
+            signature,
+            anyfunc: AnyfuncIndex::reserved_value(),
+        })
+    }
+
+    /// Docccccccccc
+    pub fn push_tag(&mut self, signature: SignatureIndex) -> TagIndex {
+        self.tags.push(FunctionType {
             signature,
             anyfunc: AnyfuncIndex::reserved_value(),
         })

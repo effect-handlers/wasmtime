@@ -313,9 +313,15 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
             Payload::TagSection(tags) => {
                 self.validator.tag_section(&tags)?;
 
-                // This feature isn't enabled at this time, so we should
-                // never get here.
-                unreachable!();
+                let cnt = usize::try_from(tags.get_count()).unwrap();
+                self.result.module.tags.reserve_exact(cnt);
+
+                for entry in tags {
+                    let sigindex = entry?.func_type_idx;
+                    let ty = TypeIndex::from_u32(sigindex);
+                    let sig_index = self.result.module.types[ty].unwrap_function();
+                    self.result.module.push_tag(sig_index);
+                }
             }
 
             Payload::GlobalSection(globals) => {
