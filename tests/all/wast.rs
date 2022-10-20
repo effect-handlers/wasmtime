@@ -25,7 +25,7 @@ fn run_wast(wast: &str, strategy: Strategy, pooling: bool) -> anyhow::Result<()>
     let multi_memory = feature_found(wast, "multi-memory");
     let threads = feature_found(wast, "threads");
     let function_references = feature_found(wast, "function-references");
-    let typed_continuations = feature_found(wast, "cont.wast");
+    let typed_continuations = feature_found(wast, "cont");
 
     let mut cfg = Config::new();
     cfg.wasm_multi_memory(multi_memory)
