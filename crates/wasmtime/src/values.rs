@@ -40,6 +40,9 @@ pub enum Val {
     /// func` in Wasm.
     FuncRef(Option<Func>),
 
+    /// A first-class reference to a WebAssembly continuation.
+    ContRef,
+
     /// An `externref` value which can hold opaque data to the Wasm instance
     /// itself.
     ///
@@ -97,6 +100,10 @@ impl Val {
                 nullable: true,
                 heap_type: HeapType::Func,
             }),
+            Val::ContRef => ValType::Ref(RefType {
+                nullable: true,
+                heap_type: HeapType::ContIndex(0),
+            }),
             Val::V128(_) => ValType::V128,
         }
     }
@@ -128,6 +135,7 @@ impl Val {
                 };
                 ValRaw::funcref(funcref)
             }
+            Val::ContRef => panic!("can't construct continuation in embedder"),
         }
     }
 
@@ -149,7 +157,10 @@ impl Val {
                 match rt.heap_type {
                     HeapType::Extern => Val::ExternRef(ExternRef::from_raw(raw.get_externref())),
                     HeapType::Func => Val::FuncRef(Func::from_raw(store, raw.get_funcref())),
-                    HeapType::Index(_) => Val::FuncRef(Func::from_raw(store, raw.get_funcref())), // TODO(dhil) fixme
+                    HeapType::FuncIndex(_) => {
+                        Val::FuncRef(Func::from_raw(store, raw.get_funcref()))
+                    }
+                    HeapType::ContIndex(_) => Val::ContRef, // TODO(dhil) fixme
                     HeapType::Bot => panic!("no bot"),
                 }
             }
@@ -246,6 +257,7 @@ impl Val {
         match self {
             Val::FuncRef(Some(f)) => f.comes_from_same_store(store),
             Val::FuncRef(None) => true,
+            Val::ContRef => true, // TODO
 
             // Integers, floats, vectors, and `externref`s have no association
             // with any particular store, so they're always considered as "yes I

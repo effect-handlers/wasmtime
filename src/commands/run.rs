@@ -410,6 +410,7 @@ impl RunCommand {
                 Val::F64(f) => println!("{}", f64::from_bits(f)),
                 Val::ExternRef(_) => println!("<externref>"),
                 Val::FuncRef(_) => println!("<funcref>"),
+                Val::ContRef => println!("<contref>"),
                 Val::V128(i) => println!("{}", i),
             }
         }

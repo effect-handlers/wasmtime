@@ -223,10 +223,15 @@ impl<'a, 'data> ModuleEnvironment<'a, 'data> {
                 self.result.module.types.reserve(num);
                 self.types.reserve_wasm_signatures(num);
 
-                for ty in types {
-                    match ty? {
+                let types: Result<Vec<_>, _> = types.into_iter().collect();
+                let types = types?;
+                for ty in types.clone() {
+                    match ty {
                         Type::Func(wasm_func_ty) => {
-                            self.declare_type_func(wasm_func_ty.try_into()?)?;
+                            self.declare_type_func(WasmFuncType::from_func_type(
+                                wasm_func_ty,
+                                types.as_slice(),
+                            )?)?;
                         }
                         Type::Cont(i) => {
                             self.declare_type_cont(i)?;

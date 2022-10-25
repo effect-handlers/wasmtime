@@ -935,7 +935,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let plan = &self.module.table_plans[table_index];
         match plan.table.wasm_ty.heap_type {
-            WasmHeapType::Func | WasmHeapType::Index(_) => match plan.style {
+            WasmHeapType::Func | WasmHeapType::FuncIndex(_) => match plan.style {
                 TableStyle::CallerChecksSignature => {
                     Ok(self.get_or_init_funcref_table_elem(builder, table_index, table, index))
                 }
@@ -1073,7 +1073,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let plan = &self.module.table_plans[table_index];
         match plan.table.wasm_ty.heap_type {
-            WasmHeapType::Func | WasmHeapType::Index(_) => match plan.style {
+            WasmHeapType::Func | WasmHeapType::FuncIndex(_) => match plan.style {
                 TableStyle::CallerChecksSignature => {
                     let table_entry_addr = builder.ins().table_addr(pointer_type, table, index, 0);
                     // Set the "initialized bit". See doc-comment on
@@ -1265,9 +1265,10 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         ht: WasmHeapType,
     ) -> WasmResult<ir::Value> {
         Ok(match ht {
-            WasmHeapType::Func => pos.ins().iconst(self.pointer_type(), 0),
+            WasmHeapType::Func | WasmHeapType::FuncIndex(_) | WasmHeapType::ContIndex(_) => {
+                pos.ins().iconst(self.pointer_type(), 0)
+            }
             WasmHeapType::Extern => pos.ins().null(self.reference_type(ht)),
-            WasmHeapType::Index(_) => pos.ins().iconst(self.pointer_type(), 0),
             WasmHeapType::Bot => panic!("goes away in refactor"),
         })
     }

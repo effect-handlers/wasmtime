@@ -140,7 +140,9 @@ pub enum HeapType {
     /// A reference to opaque data in the Wasm instance.
     Extern,
     /// A typed reference to a Wasm function.
-    Index(u32),
+    FuncIndex(u32),
+    /// A typed reference to a Wasm function.
+    ContIndex(u32),
     /// A special bottom heap type.
     Bot,
 }
@@ -150,7 +152,7 @@ impl fmt::Display for HeapType {
         match self {
             Self::Func => write!(f, "func"),
             Self::Extern => write!(f, "extern"),
-            Self::Index(i) => write!(f, "{}", i),
+            Self::FuncIndex(i) | Self::ContIndex(i) => write!(f, "{}", i),
             Self::Bot => write!(f, "bot"),
         }
     }
@@ -161,7 +163,8 @@ impl HeapType {
         match self {
             Self::Func => WasmHeapType::Func,
             Self::Extern => WasmHeapType::Extern,
-            Self::Index(i) => WasmHeapType::Index(*i),
+            Self::FuncIndex(i) => WasmHeapType::FuncIndex(*i),
+            Self::ContIndex(i) => WasmHeapType::ContIndex(*i),
             Self::Bot => WasmHeapType::Bot,
         }
     }
@@ -170,7 +173,8 @@ impl HeapType {
         match ht {
             WasmHeapType::Func => Self::Func,
             WasmHeapType::Extern => Self::Extern,
-            WasmHeapType::Index(i) => Self::Index(*i),
+            WasmHeapType::FuncIndex(i) => Self::FuncIndex(*i),
+            WasmHeapType::ContIndex(i) => Self::ContIndex(*i),
             WasmHeapType::Bot => Self::Bot,
         }
     }

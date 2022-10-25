@@ -338,6 +338,7 @@ impl Global {
                         f.caller_checked_anyfunc(store).as_ptr().cast()
                     });
                 }
+                Val::ContRef => todo!(),
                 Val::ExternRef(x) => {
                     let old = mem::replace(definition.as_externref_mut(), x.map(|x| x.inner));
                     drop(old);

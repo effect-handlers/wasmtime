@@ -60,6 +60,7 @@ pub fn create_global(store: &mut StoreOpaque, gt: &GlobalType, val: Val) -> Resu
 
                 GlobalInit::RefFunc(func_index)
             }
+            Val::ContRef => todo!(),
         },
     };
 
