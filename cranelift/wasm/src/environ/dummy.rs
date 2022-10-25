@@ -387,6 +387,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!();
     }
 
+    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value) {
+        todo!();
+    }
+
     fn translate_call_indirect(
         &mut self,
         builder: &mut FunctionBuilder,

@@ -366,6 +366,12 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
     ptr as *mut _
 }
 
+// Implementation of `resume`.
+unsafe fn resume(_vmctx: *mut VMContext, cont: *mut u8) {
+    let cont = cont as *mut Fiber<'static, (), (), ()>;
+    cont.as_mut().unwrap().resume(());
+}
+
 // Implementation of `data.drop`.
 unsafe fn data_drop(vmctx: *mut VMContext, data_index: u32) {
     let data_index = DataIndex::from_u32(data_index);

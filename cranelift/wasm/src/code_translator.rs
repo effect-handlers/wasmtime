@@ -2088,8 +2088,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let r = state.pop1();
             state.push1(environ.translate_cont_new(builder.cursor(), r)?);
         }
+        Operator::Resume { resumetable: _ } => {
+            let c = state.pop1();
+            environ.translate_resume(builder.cursor(), c);
+        }
         Operator::ContBind { type_index: _ }
-        | Operator::Resume { resumetable: _ }
         | Operator::ResumeThrow {
             tag_index: _,
             resumetable: _,
