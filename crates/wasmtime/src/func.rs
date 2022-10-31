@@ -938,7 +938,7 @@ impl Func {
                 // This isn't right.   Need to check nullable subtyping
                 (ValType::Ref(RefType { heap_type: ht1, .. }), ValType::Ref(RefType { heap_type: ht2, .. })) if ht1 == ht2 => (),
                 // Assume that two index refs are always equal.  Obviously not right.
-                (ValType::Ref(RefType { heap_type: HeapType::Index(_), ..}), ValType::Ref(RefType { heap_type: HeapType::Index(_), ..})) => (),
+                (ValType::Ref(RefType { heap_type: HeapType::FuncIndex(_) | HeapType::ContIndex(_), ..}), ValType::Ref(RefType { heap_type: HeapType::FuncIndex(_) | HeapType::ContIndex(_), ..})) => (),
                 (t1, t2) if t1 == t2 => (),
                 _ => bail!(
                     "argument type mismatch: found {} but expected {}",

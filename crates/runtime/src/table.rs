@@ -169,7 +169,7 @@ fn wasm_to_table_type(rt: WasmRefType) -> Result<TableElementType> {
     match rt.heap_type {
         WasmHeapType::Func => Ok(TableElementType::Func),
         WasmHeapType::Extern => Ok(TableElementType::Extern),
-        WasmHeapType::Index(_) => Ok(TableElementType::Func),
+        WasmHeapType::FuncIndex(_) => Ok(TableElementType::Func),
         ht => bail!("invalid table element type {:?}", ht),
     }
 }

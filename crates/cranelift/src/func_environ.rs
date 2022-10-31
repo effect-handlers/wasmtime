@@ -935,7 +935,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let plan = &self.module.table_plans[table_index];
         match plan.table.wasm_ty.heap_type {
-            WasmHeapType::Func | WasmHeapType::Index(_) => match plan.style {
+            WasmHeapType::Func | WasmHeapType::FuncIndex(_) => match plan.style {
                 TableStyle::CallerChecksSignature => {
                     Ok(self.get_or_init_funcref_table_elem(builder, table_index, table, index))
                 }
@@ -1073,7 +1073,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let plan = &self.module.table_plans[table_index];
         match plan.table.wasm_ty.heap_type {
-            WasmHeapType::Func | WasmHeapType::Index(_) => match plan.style {
+            WasmHeapType::Func | WasmHeapType::FuncIndex(_) => match plan.style {
                 TableStyle::CallerChecksSignature => {
                     let table_entry_addr = builder.ins().table_addr(pointer_type, table, index, 0);
                     // Set the "initialized bit". See doc-comment on
@@ -1265,9 +1265,10 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         ht: WasmHeapType,
     ) -> WasmResult<ir::Value> {
         Ok(match ht {
-            WasmHeapType::Func => pos.ins().iconst(self.pointer_type(), 0),
+            WasmHeapType::Func | WasmHeapType::FuncIndex(_) | WasmHeapType::ContIndex(_) => {
+                pos.ins().iconst(self.pointer_type(), 0)
+            }
             WasmHeapType::Extern => pos.ins().null(self.reference_type(ht)),
-            WasmHeapType::Index(_) => pos.ins().iconst(self.pointer_type(), 0),
             WasmHeapType::Bot => panic!("goes away in refactor"),
         })
     }
@@ -1306,6 +1307,37 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             .ins()
             .call_indirect(builtin_sig, builtin_addr, &[vmctx, func_index]);
         Ok(pos.func.dfg.first_result(call_inst))
+    }
+
+    fn translate_cont_new(
+        &mut self,
+        mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
+        func: ir::Value,
+    ) -> WasmResult<ir::Value> {
+        let builtin_index = BuiltinFunctionIndex::cont_new();
+        let builtin_sig = self.builtin_function_signatures.cont_new(&mut pos.func);
+        let (vmctx, builtin_addr) =
+            self.translate_load_builtin_function_address(&mut pos, builtin_index);
+
+        let call_inst = pos
+            .ins()
+            .call_indirect(builtin_sig, builtin_addr, &[vmctx, func]);
+        Ok(pos.func.dfg.first_result(call_inst))
+    }
+
+    fn translate_resume(
+        &mut self,
+        mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
+        cont: ir::Value,
+    ) {
+        let builtin_index = BuiltinFunctionIndex::resume();
+        let builtin_sig = self.builtin_function_signatures.resume(&mut pos.func);
+        let (vmctx, builtin_addr) =
+            self.translate_load_builtin_function_address(&mut pos, builtin_index);
+
+        let call_inst = pos
+            .ins()
+            .call_indirect(builtin_sig, builtin_addr, &[vmctx, cont]);
     }
 
     fn translate_custom_global_get(

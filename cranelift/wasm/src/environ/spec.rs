@@ -9,7 +9,7 @@
 use crate::state::FuncTranslationState;
 use crate::{
     DataIndex, ElemIndex, FuncIndex, Global, GlobalIndex, Memory, MemoryIndex, SignatureIndex,
-    Table, TableIndex, Tag, TagIndex, TypeIndex, WasmError, WasmFuncType, WasmResult, WasmHeapType,
+    Table, TableIndex, Tag, TagIndex, TypeIndex, WasmError, WasmFuncType, WasmHeapType, WasmResult,
 };
 use core::convert::From;
 use cranelift_codegen::cursor::FuncCursor;
@@ -176,6 +176,12 @@ pub trait FuncEnvironment: TargetEnvironment {
         callee: ir::Value,
         call_args: &[ir::Value],
     ) -> WasmResult<ir::Inst>;
+
+    /// Doc
+    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value>;
+
+    /// Doc
+    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value);
 
     /// Translate a `call` WebAssembly instruction at `pos`.
     ///
@@ -376,7 +382,11 @@ pub trait FuncEnvironment: TargetEnvironment {
     /// null sentinel is not a null reference type pointer for your type. If you
     /// override this method, then you should also override
     /// `translate_ref_is_null` as well.
-    fn translate_ref_null(&mut self, mut pos: FuncCursor, ty: WasmHeapType) -> WasmResult<ir::Value> {
+    fn translate_ref_null(
+        &mut self,
+        mut pos: FuncCursor,
+        ty: WasmHeapType,
+    ) -> WasmResult<ir::Value> {
         let _ = ty;
         Ok(pos.ins().null(self.reference_type(ty)))
     }

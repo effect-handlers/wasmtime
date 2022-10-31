@@ -16,7 +16,7 @@
 //!
 //! - the loads and stores need the memory base address;
 //! - the `get_global` and `set_global` instructions depend on how the globals are implemented;
-//! - `memory.size` and `memory.grow` are runtime functions;
+//! - `memory.size`[citation needed] and `memory.grow` are runtime functions;
 //! - `call_indirect` has to translate the function index into the address of where this
 //!    is;
 //!
@@ -2057,7 +2057,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             };
             // `index` is the index of the function's signature and `table_index` is the index of
             // the table to search the function in.
-            let (sigref, num_args) = state.get_indirect_sig(builder.func, u32::from(*index), environ)?;
+            let (sigref, num_args) =
+                state.get_indirect_sig(builder.func, u32::from(*index), environ)?;
             //let table = state.get_or_create_table(builder.func, *table_index, environ)?;
             let callee = state.pop1();
 
@@ -2083,7 +2084,21 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             builder.ins().trapnz(is_null, ir::TrapCode::NullReference);
             state.push1(r);
         }
-        Operator::ContNew { type_index: _ } | Operator::ContBind { type_index: _  } | Operator::Resume { resumetable: _ } | Operator::ResumeThrow { tag_index: _, resumetable: _ } | Operator::Suspend { tag_index: _ } | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
+        Operator::ContNew { type_index: _ } => {
+            let r = state.pop1();
+            state.push1(environ.translate_cont_new(builder.cursor(), r)?);
+        }
+        Operator::Resume { resumetable: _ } => {
+            let c = state.pop1();
+            environ.translate_resume(builder.cursor(), c);
+        }
+        Operator::ContBind { type_index: _ }
+        | Operator::ResumeThrow {
+            tag_index: _,
+            resumetable: _,
+        }
+        | Operator::Suspend { tag_index: _ }
+        | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
     };
     Ok(())
 }

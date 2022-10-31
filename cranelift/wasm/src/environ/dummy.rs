@@ -383,6 +383,14 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         Ok(())
     }
 
+    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value> {
+        todo!();
+    }
+
+    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value) {
+        todo!();
+    }
+
     fn translate_call_indirect(
         &mut self,
         builder: &mut FunctionBuilder,

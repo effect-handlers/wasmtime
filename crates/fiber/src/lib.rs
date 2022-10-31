@@ -46,6 +46,7 @@ impl FiberStack {
     }
 }
 
+#[derive(Debug)]
 pub struct Fiber<'a, Resume, Yield, Return> {
     stack: FiberStack,
     inner: imp::Fiber,
