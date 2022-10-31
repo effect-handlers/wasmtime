@@ -14,7 +14,10 @@
 //!        | &Cell<RunResult>      |   <- where to store results
 //! 0xAff8 +-----------------------+
 //!        | *const u8             |   <- last sp to resume from
-//! 0xAff0 +-----------------------+   <- 16-byte aligned
+//! 0xAff0 +-----------------------+
+//!        | Suspend<R, Y, Ret>    |   <- suspend object (8 bytes) + 8 bytes for padding
+//!        +-----------------------+
+//!        |                       |   <- 16-byte aligned
 //!        |                       |
 //!        ~        ...            ~   <- actual native stack space to use
 //!        |                       |
@@ -102,6 +105,7 @@ impl Drop for FiberStack {
 #[derive(Debug)]
 pub struct Fiber;
 
+#[derive(Clone)]
 pub struct Suspend(*mut u8);
 
 extern "C" {
@@ -119,8 +123,17 @@ where
 {
     unsafe {
         let inner = Suspend(top_of_stack);
+        // let inner2 = Suspend(top_of_stack);
+        let suspend_addr = top_of_stack.cast::<Suspend>().offset(-3);
+        // println!("ptr: {:?}", suspend_addr);
+        // let inner_ptr = top_of_stack.sub(0x18) as *mut Suspend;
+        // inner_ptr.write(inner2);
+        // *inner_ptr = inner;
+        // let initial = inner.take_resume::<A, B, C>();
+        // super::Suspend::<A, B, C>::execute(inner, initial, Box::from_raw(arg0.cast::<F>()))
         let initial = inner.take_resume::<A, B, C>();
-        super::Suspend::<A, B, C>::execute(inner, initial, Box::from_raw(arg0.cast::<F>()))
+        suspend_addr.write(inner);
+        super::Suspend::<A, B, C>::execute(suspend_addr.read(), initial, Box::from_raw(arg0.cast::<F>()))
     }
 }
 

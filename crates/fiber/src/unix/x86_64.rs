@@ -59,17 +59,17 @@ asm_func!(
         // The first 16 bytes of stack are reserved for metadata, so we start
         // storing values beneath that.
         lea rax, ", asm_sym!("wasmtime_fiber_start"), "[rip]
-        mov -0x18[rdi], rax
-        mov -0x20[rdi], rdi   // loaded into rbp during switch
-        mov -0x28[rdi], rsi   // loaded into rbx during switch
-        mov -0x30[rdi], rdx   // loaded into r12 during switch
+        mov -0x28[rdi], rax
+        mov -0x30[rdi], rdi   // loaded into rbp during switch
+        mov -0x38[rdi], rsi   // loaded into rbx during switch
+        mov -0x40[rdi], rdx   // loaded into r12 during switch
 
         // And then we specify the stack pointer resumption should begin at. Our
         // `wasmtime_fiber_switch` function consumes 6 registers plus a return
         // pointer, and the top 16 bytes are reserved, so that's:
         //
-        //	(6 + 1) * 16 + 16 = 0x48
-        lea rax, -0x48[rdi]
+        //	(6 + 1) * 16 + 16 + 16 = 0x58
+        lea rax, -0x58[rdi]
         mov -0x10[rdi], rax
         ret
     ",
@@ -126,7 +126,7 @@ asm_func!(
             4,            /* the byte length of this expression */ \
             0x57,         /* DW_OP_reg7 (rsp) */ \
             0x06,         /* DW_OP_deref */ \
-            0x23, 0x38    /* DW_OP_plus_uconst 0x38 */
+            0x23, 0x48    /* DW_OP_plus_uconst 0x38 */
 
         // And now after we've indicated where our CFA is for our parent
         // function, we can define that where all of the saved registers are
@@ -134,13 +134,13 @@ asm_func!(
         // these registers are all stored relative to the CFA. Note that this
         // order is kept in sync with the above register spills in
         // `wasmtime_fiber_switch`.
-        .cfi_rel_offset rip, -8
-        .cfi_rel_offset rbp, -16
-        .cfi_rel_offset rbx, -24
-        .cfi_rel_offset r12, -32
-        .cfi_rel_offset r13, -40
-        .cfi_rel_offset r14, -48
-        .cfi_rel_offset r15, -56
+        .cfi_rel_offset rip, -16
+        .cfi_rel_offset rbp, -24
+        .cfi_rel_offset rbx, -32
+        .cfi_rel_offset r12, -40
+        .cfi_rel_offset r13, -48
+        .cfi_rel_offset r14, -56
+        .cfi_rel_offset r15, -64
 
         // The body of this function is pretty similar. All our parameters are
         // already loaded into registers by the switch function. The
