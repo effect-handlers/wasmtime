@@ -13,9 +13,9 @@
 //! 0xB000 +-----------------------+   <- top of stack
 //!        | &Cell<RunResult>      |   <- where to store results
 //! 0xAff8 +-----------------------+
-//!        | *const u8             |   <- last sp to resume from
-//! 0xAff0 +-----------------------+
 //!        | Suspend<R, Y, Ret>    |   <- suspend object (8 bytes) + 8 bytes for padding
+//! 0xAff0 +-----------------------+
+//!        | *const u8             |   <- last sp to resume from
 //!        +-----------------------+
 //!        |                       |   <- 16-byte aligned
 //!        |                       |
@@ -124,7 +124,7 @@ where
     unsafe {
         let inner = Suspend(top_of_stack);
         // let inner2 = Suspend(top_of_stack);
-        let suspend_addr = top_of_stack.cast::<Suspend>().offset(-3);
+        let suspend_addr = top_of_stack.cast::<Suspend>().offset(-2);
         // println!("ptr: {:?}", suspend_addr);
         // let inner_ptr = top_of_stack.sub(0x18) as *mut Suspend;
         // inner_ptr.write(inner2);
