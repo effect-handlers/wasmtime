@@ -370,11 +370,11 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
 unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let cont = cont as *mut Fiber<'static, (), (), ()>;
-    inst.set_tsp(cont.read().stack.top().unwrap());
+    inst.set_tsp(cont.as_ref().unwrap().stack.top().unwrap());
     cont.as_mut().unwrap().resume(());
 }
 
-// Implementation of `suspens`
+// Implementation of `suspend`
 unsafe fn suspend(vmctx: *mut VMContext) {
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let stack_ptr = inst.tsp();

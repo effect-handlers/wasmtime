@@ -51,6 +51,8 @@ macro_rules! foreach_builtin_function {
             cont_new(vmctx: vmctx, r: pointer) -> pointer;
             /// Resume a continuation
             resume(vmctx: vmctx, r: pointer);
+            /// Suspend a computation
+            suspend(vmctx: vmctx);
             /// Invoked when fuel has run out while executing a function.
             out_of_gas(vmctx: vmctx);
             /// Invoked when we reach a new epoch.
