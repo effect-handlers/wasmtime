@@ -352,6 +352,7 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
         Fiber::new(
             FiberStack::new(4096).unwrap(),
             move |first_resumption: (), suspend: &Suspend<_, (), _>| {
+                panic!("Resume here");
                 let trampoline = mem::transmute::<
                     *const VMFunctionBody,
                     unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
@@ -371,7 +372,8 @@ unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let cont = cont as *mut Fiber<'static, (), (), ()>;
     inst.set_tsp(cont.as_ref().unwrap().stack.top().unwrap());
-    cont.as_mut().unwrap().resume(());
+    cont.as_mut().unwrap().resume(()); // <--- PROBLEM doesn't seem to return...
+    panic!("WELCOME BACK!")
 }
 
 // Implementation of `suspend`
