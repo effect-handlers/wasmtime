@@ -9,7 +9,7 @@ cfg_if::cfg_if! {
         mod windows;
         use windows as imp;
     } else if #[cfg(unix)] {
-        mod unix;
+        pub mod unix;
         use unix as imp;
     } else {
         compile_error!("fibers are not supported on this platform");
@@ -17,8 +17,12 @@ cfg_if::cfg_if! {
 }
 
 /// Represents an execution stack to use for a fiber.
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct FiberStack(imp::FiberStack);
+
+// TODO(dhil): temporary hack.
+unsafe impl Send for FiberStack {}
+unsafe impl Sync for FiberStack {}
 
 impl FiberStack {
     /// Creates a new fiber stack of the given size.
@@ -48,7 +52,7 @@ impl FiberStack {
 
 #[derive(Debug)]
 pub struct Fiber<'a, Resume, Yield, Return> {
-    stack: FiberStack,
+    pub stack: FiberStack, // TODO(dhil): temporary hack
     inner: imp::Fiber,
     done: Cell<bool>,
     _phantom: PhantomData<&'a (Resume, Yield, Return)>,
@@ -59,7 +63,7 @@ pub struct Suspend<Resume, Yield, Return> {
     _phantom: PhantomData<(Resume, Yield, Return)>,
 }
 
-enum RunResult<Resume, Yield, Return> {
+pub enum RunResult<Resume, Yield, Return> {
     Executing,
     Resuming(Resume),
     Yield(Yield),

@@ -39,7 +39,7 @@ use std::cell::Cell;
 use std::io;
 use std::ptr;
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct FiberStack {
     // The top of the stack; for stacks allocated by the fiber implementation itself,
     // the base address of the allocation will be `top.sub(len.unwrap())`
@@ -106,7 +106,8 @@ impl Drop for FiberStack {
 pub struct Fiber;
 
 #[derive(Clone)]
-pub struct Suspend(*mut u8);
+pub struct Suspend(pub *mut u8);
+//-----------------^ parent pointer
 
 extern "C" {
     fn wasmtime_fiber_init(
@@ -168,7 +169,7 @@ impl Fiber {
 }
 
 impl Suspend {
-    pub(crate) fn switch<A, B, C>(&self, result: RunResult<A, B, C>) -> A {
+    pub fn switch<A, B, C>(&self, result: RunResult<A, B, C>) -> A {
         unsafe {
             // Calculate 0xAff8 and then write to it
             (*self.result_location::<A, B, C>()).set(result);

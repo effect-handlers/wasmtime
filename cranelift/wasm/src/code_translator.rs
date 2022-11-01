@@ -2097,7 +2097,10 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             tag_index: _,
             resumetable: _,
         }
-        | Operator::Suspend { tag_index: _ }
+        | Operator::Suspend { tag_index: _ } => {
+            //let _c = state.pop1();
+            environ.translate_suspend(builder.cursor(), tag_index);
+        }
         | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
     };
     Ok(())

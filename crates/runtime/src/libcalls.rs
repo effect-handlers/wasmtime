@@ -367,9 +367,21 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
 }
 
 // Implementation of `resume`.
-unsafe fn resume(_vmctx: *mut VMContext, cont: *mut u8) {
+unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
+    let inst = vmctx.as_mut().unwrap().instance_mut();
     let cont = cont as *mut Fiber<'static, (), (), ()>;
+    inst.set_tsp(cont.read().stack.top().unwrap());
     cont.as_mut().unwrap().resume(());
+}
+
+// Implementation of `suspens`
+unsafe fn suspend(vmctx: *mut VMContext) {
+    let inst = vmctx.as_mut().unwrap().instance_mut();
+    let stack_ptr = inst.tsp();
+    let suspend_addr = stack_ptr.cast::<wasmtime_fiber::unix::Suspend>().offset(-2);
+    let suspend = suspend_addr.read();
+    inst.set_tsp(suspend.0);
+    suspend.switch::<(), (), ()>(wasmtime_fiber::RunResult::Yield(()))
 }
 
 // Implementation of `data.drop`.

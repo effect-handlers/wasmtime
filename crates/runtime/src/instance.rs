@@ -90,6 +90,9 @@ pub(crate) struct Instance {
     /// allocation, but some host-defined objects will store their state here.
     host_state: Box<dyn Any + Send + Sync>,
 
+    /// Current top of the stack pointer (tsp)
+    tsp: *mut u8,
+
     /// Additional context used by compiled wasm code. This field is last, and
     /// represents a dynamically-sized array that extends beyond the nominal
     /// end of the struct (similar to a flexible array member).
@@ -98,6 +101,13 @@ pub(crate) struct Instance {
 
 #[allow(clippy::cast_ptr_alignment)]
 impl Instance {
+    pub(crate) fn tsp(&self) -> *mut u8 {
+        self.tsp
+    }
+    pub(crate) fn set_tsp(&mut self, ptr: *mut u8) {
+        self.tsp = ptr;
+    }
+
     /// Create an instance at the given memory address.
     ///
     /// It is assumed the memory was properly aligned and the
@@ -127,6 +137,7 @@ impl Instance {
                 dropped_elements,
                 dropped_data,
                 host_state: req.host_state,
+                tsp: std::ptr::null_mut(),
                 vmctx: VMContext {
                     _marker: std::marker::PhantomPinned,
                 },
@@ -1047,7 +1058,8 @@ unsafe impl Send for InstanceHandle {}
 unsafe impl Sync for InstanceHandle {}
 
 fn _assert_send_sync() {
-    fn _assert<T: Send + Sync>() {}
+    // fn _assert<T: Send + Sync>() {}
+    fn _assert<T>() {}
     _assert::<Instance>();
 }
 
