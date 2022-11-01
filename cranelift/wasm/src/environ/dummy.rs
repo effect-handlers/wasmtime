@@ -391,6 +391,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!();
     }
 
+    fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32) {
+        todo!();
+    }
+
     fn translate_call_indirect(
         &mut self,
         builder: &mut FunctionBuilder,

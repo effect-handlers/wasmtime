@@ -183,6 +183,9 @@ pub trait FuncEnvironment: TargetEnvironment {
     /// Doc
     fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value);
 
+    /// Doc
+    fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32);
+
     /// Translate a `call` WebAssembly instruction at `pos`.
     ///
     /// Insert instructions at `pos` for a direct call to the function `callee_index`.
