@@ -17,12 +17,8 @@ cfg_if::cfg_if! {
 }
 
 /// Represents an execution stack to use for a fiber.
-#[derive(Clone,Debug)]
+#[derive(Debug)]
 pub struct FiberStack(imp::FiberStack);
-
-// TODO(dhil): temporary hack.
-unsafe impl Send for FiberStack {}
-unsafe impl Sync for FiberStack {}
 
 impl FiberStack {
     /// Creates a new fiber stack of the given size.
@@ -47,6 +43,14 @@ impl FiberStack {
     /// Returns `None` if the platform does not support getting the top of the stack.
     pub fn top(&self) -> Option<*mut u8> {
         self.0.top()
+    }
+
+    pub unsafe fn parent(&self) {
+        self.0.parent();
+    }
+
+    pub unsafe fn write_parent(&self, tsp: *mut u8) {
+        self.0.write_parent(tsp);
     }
 }
 

@@ -352,13 +352,15 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
         Fiber::new(
             FiberStack::new(4096).unwrap(),
             move |first_resumption: (), suspend: &Suspend<_, (), _>| {
-                panic!("Resume here");
+                eprintln!("resuming");
                 let trampoline = mem::transmute::<
                     *const VMFunctionBody,
                     unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
                 >((*func).func_ptr.as_ptr());
                 let trampoline = prepare_host_to_wasm_trampoline(vmctx, trampoline);
-                trampoline((*func).vmctx, vmctx)
+                eprintln!("have trampoline {:?}", trampoline);
+                trampoline((*func).vmctx, vmctx);
+                eprintln!("done with trampoline! uh oh");
             },
         )
         .unwrap(),
@@ -371,18 +373,28 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
 unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let cont = cont as *mut Fiber<'static, (), (), ()>;
-    inst.set_tsp(cont.as_ref().unwrap().stack.top().unwrap());
-    cont.as_mut().unwrap().resume(()); // <--- PROBLEM doesn't seem to return...
-    panic!("WELCOME BACK!")
+    eprintln!(
+        "resume setting tsp to {:?}",
+        cont.as_ref().unwrap().stack.top().unwrap()
+    );
+    let cont_stack = &cont.as_ref().unwrap().stack;
+    cont_stack.write_parent(inst.tsp());
+    inst.set_tsp(cont_stack.top().unwrap());
+    match cont.as_mut().unwrap().resume(()) {
+        Ok(res) => (),
+        Err(y) => (),
+    }
+    //panic!("WELCOME BACK!");
 }
 
 // Implementation of `suspend`
 unsafe fn suspend(vmctx: *mut VMContext) {
+    //panic!("suspending");
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let stack_ptr = inst.tsp();
-    let suspend_addr = stack_ptr.cast::<wasmtime_fiber::unix::Suspend>().offset(-2);
-    let suspend = suspend_addr.read();
-    inst.set_tsp(suspend.0);
+    let parent = stack_ptr.cast::<*mut u8>().offset(-2).read();
+    inst.set_tsp(parent);
+    let suspend = wasmtime_fiber::unix::Suspend::from_top_ptr(stack_ptr);
     suspend.switch::<(), (), ()>(wasmtime_fiber::RunResult::Yield(()))
 }
 

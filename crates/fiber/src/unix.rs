@@ -13,11 +13,13 @@
 //! 0xB000 +-----------------------+   <- top of stack
 //!        | &Cell<RunResult>      |   <- where to store results
 //! 0xAff8 +-----------------------+
-//!        | Suspend<R, Y, Ret>    |   <- suspend object (8 bytes) + 8 bytes for padding
+//!        | *mut u8 (Parent TSP)  |
 //! 0xAff0 +-----------------------+
+//!        | 8 bytes padding       |
+//! 0xAfe8 +-----------------------+
 //!        | *const u8             |   <- last sp to resume from
-//!        +-----------------------+
-//!        |                       |   <- 16-byte aligned
+//! 0xAfe0 +-----------------------+   <- 16-byte aligned
+//!        |                       |
 //!        |                       |
 //!        ~        ...            ~   <- actual native stack space to use
 //!        |                       |
@@ -39,7 +41,7 @@ use std::cell::Cell;
 use std::io;
 use std::ptr;
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct FiberStack {
     // The top of the stack; for stacks allocated by the fiber implementation itself,
     // the base address of the allocation will be `top.sub(len.unwrap())`
@@ -89,6 +91,14 @@ impl FiberStack {
     pub fn top(&self) -> Option<*mut u8> {
         Some(self.top)
     }
+
+    pub unsafe fn parent(&self) {
+        self.top.cast::<*mut u8>().offset(-2).read();
+    }
+
+    pub unsafe fn write_parent(&self, tsp: *mut u8) {
+        self.top.cast::<*mut u8>().offset(-2).write(tsp);
+    }
 }
 
 impl Drop for FiberStack {
@@ -107,7 +117,7 @@ pub struct Fiber;
 
 #[derive(Clone)]
 pub struct Suspend(pub *mut u8);
-//-----------------^ parent pointer
+//-----------------^ CURRENT stack pointer
 
 extern "C" {
     fn wasmtime_fiber_init(
@@ -124,17 +134,8 @@ where
 {
     unsafe {
         let inner = Suspend(top_of_stack);
-        // let inner2 = Suspend(top_of_stack);
-        let suspend_addr = top_of_stack.cast::<Suspend>().offset(-2);
-        // println!("ptr: {:?}", suspend_addr);
-        // let inner_ptr = top_of_stack.sub(0x18) as *mut Suspend;
-        // inner_ptr.write(inner2);
-        // *inner_ptr = inner;
-        // let initial = inner.take_resume::<A, B, C>();
-        // super::Suspend::<A, B, C>::execute(inner, initial, Box::from_raw(arg0.cast::<F>()))
         let initial = inner.take_resume::<A, B, C>();
-        suspend_addr.write(inner);
-        super::Suspend::<A, B, C>::execute(suspend_addr.read(), initial, Box::from_raw(arg0.cast::<F>()))
+        super::Suspend::<A, B, C>::execute(inner, initial, Box::from_raw(arg0.cast::<F>()))
     }
 }
 
@@ -173,6 +174,7 @@ impl Suspend {
         unsafe {
             // Calculate 0xAff8 and then write to it
             (*self.result_location::<A, B, C>()).set(result);
+            eprintln!("switch {:?}", self.0);
             wasmtime_fiber_switch(self.0);
             self.take_resume::<A, B, C>()
         }
@@ -189,6 +191,10 @@ impl Suspend {
         let ret = self.0.cast::<*const u8>().offset(-1).read();
         assert!(!ret.is_null());
         ret.cast()
+    }
+
+    pub fn from_top_ptr(ptr: *mut u8) -> Self {
+        Suspend(ptr)
     }
 }
 
