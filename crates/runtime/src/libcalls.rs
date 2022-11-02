@@ -353,6 +353,7 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
             FiberStack::new(4096).unwrap(),
             move |first_resumption: (), suspend: &Suspend<_, (), _>| {
                 eprintln!("resuming");
+                eprintln!("func ptr is {:?}", (*func).func_ptr.as_ptr());
                 let trampoline = mem::transmute::<
                     *const VMFunctionBody,
                     unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
@@ -389,7 +390,7 @@ unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
 
 // Implementation of `suspend`
 unsafe fn suspend(vmctx: *mut VMContext) {
-    //panic!("suspending");
+    panic!("suspending");
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let stack_ptr = inst.tsp();
     let parent = stack_ptr.cast::<*mut u8>().offset(-2).read();

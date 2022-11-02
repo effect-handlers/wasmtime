@@ -173,8 +173,8 @@ impl Suspend {
     pub fn switch<A, B, C>(&self, result: RunResult<A, B, C>) -> A {
         unsafe {
             // Calculate 0xAff8 and then write to it
+            panic!("switch {:?}", self.0);
             (*self.result_location::<A, B, C>()).set(result);
-            eprintln!("switch {:?}", self.0);
             wasmtime_fiber_switch(self.0);
             self.take_resume::<A, B, C>()
         }

@@ -44,8 +44,8 @@ asm_func!(
 
 // fn(
 //    top_of_stack(rdi): *mut u8,
-//    entry_point(rsi): extern fn(*mut u8, *mut u8),
-//    entry_arg0(rdx): *mut u8,
+//    entry_point(rsi): extern fn(*mut u8, *mut u8),  (fiber_start in rust)
+//    entry_arg0(rdx): *mut u8,    (closure from Fiber::new)
 // )
 #[rustfmt::skip]
 asm_func!(
