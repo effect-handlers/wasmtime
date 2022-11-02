@@ -25,7 +25,7 @@ use std::mem;
 pub unsafe fn prepare_host_to_wasm_trampoline<T>(vmctx: *mut VMContext, func: T) -> T {
     assert_eq!(mem::size_of::<T>(), mem::size_of::<usize>());
 
-    eprintln!("have func {:?}", func);
+    //eprintln!("have func {:?}", func);
 
     // Save the callee in the `vmctx`. The trampoline will read this function
     // pointer and tail call to it.
