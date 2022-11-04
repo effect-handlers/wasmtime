@@ -346,30 +346,31 @@ unsafe fn ref_func(vmctx: *mut VMContext, func_index: u32) -> *mut u8 {
 }
 
 // Implementation of `cont.new`.
-unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
-    let func = func as *mut VMCallerCheckedAnyfunc;
+unsafe fn cont_new(vmctx: *mut VMContext, fptr: *mut u8 /* assume f : () -> () */) -> *mut u8 {
+    let f = fptr as *mut VMCallerCheckedAnyfunc;
     let fiber = Box::new(
         Fiber::new(
             FiberStack::new(4096).unwrap(),
-            move |first_resumption: (), suspend: &Suspend<_, (), _>| {
-                let trampoline = mem::transmute::<
-                    *const VMFunctionBody,
-                    unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
-                >((*func).func_ptr.as_ptr());
-                let trampoline = prepare_host_to_wasm_trampoline(vmctx, trampoline);
-                trampoline((*func).vmctx, vmctx)
+            move |_resume_val: (), _suspend: &Suspend<(), (), ()>| {
+                let transmuted_f =
+                    mem::transmute::<
+                            *const VMFunctionBody,
+                            unsafe extern "C" fn(*mut VMOpaqueContext,
+                                                 *mut VMContext),
+                        >((*f).func_ptr.as_ptr());
+                let trampolined_f = prepare_host_to_wasm_trampoline(vmctx, transmuted_f);
+                trampolined_f((*f).vmctx, vmctx)
             },
         )
         .unwrap(),
     );
-    let ptr: *mut Fiber<'static, (), (), ()> = Box::into_raw(fiber);
-    ptr as *mut _
+    Box::into_raw(fiber) as *mut Fiber<'static, (), (), ()> as *mut u8
 }
 
 // Implementation of `resume`.
 unsafe fn resume(_vmctx: *mut VMContext, cont: *mut u8) {
     let cont = cont as *mut Fiber<'static, (), (), ()>;
-    cont.as_mut().unwrap().resume(());
+    cont.as_mut().unwrap().resume(()).unwrap()
 }
 
 // Implementation of `data.drop`.
