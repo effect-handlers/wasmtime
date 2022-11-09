@@ -1,14 +1,23 @@
+;; Small continuation resume test
+;; expected output:
+;; 1 : i32
+;; 2 : i32
+;; 3 : i32
 (module
-  (type $t1 (func))
-  (type $c1 (cont $t1))
+  (func $print (import "spectest" "print_i32") (param i32) (result))
+  (type $ft (func))
+  (type $ct (cont $ft))
   (tag $h)
-  (func $f1
-     (suspend $h))
-  (table $t 1 funcref)
-  (elem (table $t) (i32.const 0) funcref (ref.func $f1))
-  (func (export "main")
-      (resume (cont.new (type $c1) (ref.func $f1)))
-  )
+  (func $f (export "f")
+    (suspend $h)
+    (call $print (i32.const 2)))
+  (func (export "run")
+    (call $print (i32.const 1))
+    (ref.func $f)
+    (cont.new (type $ct))
+    (resume)
+    (call $print (i32.const 3)))
 )
 
-(invoke "main")
+(invoke "run")
+
