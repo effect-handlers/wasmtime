@@ -387,7 +387,7 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!();
     }
 
-    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value) {
+    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value) -> WasmResult<ir::Value> {
         todo!();
     }
 

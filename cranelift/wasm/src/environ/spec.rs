@@ -181,7 +181,7 @@ pub trait FuncEnvironment: TargetEnvironment {
     fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value>;
 
     /// Doc
-    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value);
+    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value) -> WasmResult<ir::Value>;
 
     /// Doc
     fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32);

@@ -453,90 +453,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.reachable = false;
         }
         Operator::BrIf { relative_depth } => translate_br_if(*relative_depth, builder, state),
-        Operator::BrTable { targets } => {
-            let default = targets.default();
-            let mut min_depth = default;
-            for depth in targets.targets() {
-                let depth = depth?;
-                if depth < min_depth {
-                    min_depth = depth;
-                }
-            }
-            let jump_args_count = {
-                let i = state.control_stack.len() - 1 - (min_depth as usize);
-                let min_depth_frame = &state.control_stack[i];
-                if min_depth_frame.is_loop() {
-                    min_depth_frame.num_param_values()
-                } else {
-                    min_depth_frame.num_return_values()
-                }
-            };
-            let val = state.pop1();
-            let mut data = JumpTableData::with_capacity(targets.len() as usize);
-            if jump_args_count == 0 {
-                // No jump arguments
-                for depth in targets.targets() {
-                    let depth = depth?;
-                    let block = {
-                        let i = state.control_stack.len() - 1 - (depth as usize);
-                        let frame = &mut state.control_stack[i];
-                        frame.set_branched_to_exit();
-                        frame.br_destination()
-                    };
-                    data.push_entry(block);
-                }
-                let jt = builder.create_jump_table(data);
-                let block = {
-                    let i = state.control_stack.len() - 1 - (default as usize);
-                    let frame = &mut state.control_stack[i];
-                    frame.set_branched_to_exit();
-                    frame.br_destination()
-                };
-                builder.ins().br_table(val, block, jt);
-            } else {
-                // Here we have jump arguments, but Cranelift's br_table doesn't support them
-                // We then proceed to split the edges going out of the br_table
-                let return_count = jump_args_count;
-                let mut dest_block_sequence = vec![];
-                let mut dest_block_map = HashMap::new();
-                for depth in targets.targets() {
-                    let depth = depth?;
-                    let branch_block = match dest_block_map.entry(depth as usize) {
-                        hash_map::Entry::Occupied(entry) => *entry.get(),
-                        hash_map::Entry::Vacant(entry) => {
-                            let block = builder.create_block();
-                            dest_block_sequence.push((depth as usize, block));
-                            *entry.insert(block)
-                        }
-                    };
-                    data.push_entry(branch_block);
-                }
-                let default_branch_block = match dest_block_map.entry(default as usize) {
-                    hash_map::Entry::Occupied(entry) => *entry.get(),
-                    hash_map::Entry::Vacant(entry) => {
-                        let block = builder.create_block();
-                        dest_block_sequence.push((default as usize, block));
-                        *entry.insert(block)
-                    }
-                };
-                let jt = builder.create_jump_table(data);
-                builder.ins().br_table(val, default_branch_block, jt);
-                for (depth, dest_block) in dest_block_sequence {
-                    builder.switch_to_block(dest_block);
-                    builder.seal_block(dest_block);
-                    let real_dest_block = {
-                        let i = state.control_stack.len() - 1 - depth;
-                        let frame = &mut state.control_stack[i];
-                        frame.set_branched_to_exit();
-                        frame.br_destination()
-                    };
-                    let destination_args = state.peekn_mut(return_count);
-                    canonicalise_then_jump(builder, real_dest_block, destination_args);
-                }
-                state.popn(return_count);
-            }
-            state.reachable = false;
-        }
+        Operator::BrTable { targets } => translate_br_table(
+            builder,
+            state,
+            targets.targets().try_collect()?,
+            targets.default(),
+        )?,
         Operator::Return => {
             let return_count = {
                 let frame = &mut state.control_stack[0];
@@ -2088,9 +2010,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let r = state.pop1();
             state.push1(environ.translate_cont_new(builder.cursor(), r)?);
         }
-        Operator::Resume { resumetable: _ } => {
+        Operator::Resume { resumetable } => {
             let c = state.pop1();
-            environ.translate_resume(builder.cursor(), c);
+            let jmpn = environ.translate_resume(builder.cursor(), c)?;
+            state.push1(jmpn);
+
+            let targets = todo!("some_calculation_of_resumetable");
+            translate_br_table(builder, state, targets, 0);
         }
         Operator::Suspend { tag_index } => {
             //let _c = state.pop1();
@@ -2103,6 +2029,93 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         }
         | Operator::Barrier { blockty: _, .. } => todo!("Implement continuation instructions"),
     };
+    Ok(())
+}
+
+fn translate_br_table(
+    builder: &mut FunctionBuilder,
+    state: &mut FuncTranslationState,
+    targets: Vec<u32>,
+    default: u32,
+) -> WasmResult<()> {
+    let mut min_depth = default;
+    for depth in targets.clone() {
+        if depth < min_depth {
+            min_depth = depth;
+        }
+    }
+    let jump_args_count = {
+        let i = state.control_stack.len() - 1 - (min_depth as usize);
+        let min_depth_frame = &state.control_stack[i];
+        if min_depth_frame.is_loop() {
+            min_depth_frame.num_param_values()
+        } else {
+            min_depth_frame.num_return_values()
+        }
+    };
+    let val = state.pop1();
+    let mut data = JumpTableData::with_capacity(targets.len());
+    if jump_args_count == 0 {
+        // No jump arguments
+        for depth in targets {
+            let block = {
+                let i = state.control_stack.len() - 1 - (depth as usize);
+                let frame = &mut state.control_stack[i];
+                frame.set_branched_to_exit();
+                frame.br_destination()
+            };
+            data.push_entry(block);
+        }
+        let jt = builder.create_jump_table(data);
+        let block = {
+            let i = state.control_stack.len() - 1 - (default as usize);
+            let frame = &mut state.control_stack[i];
+            frame.set_branched_to_exit();
+            frame.br_destination()
+        };
+        builder.ins().br_table(val, block, jt);
+    } else {
+        // Here we have jump arguments, but Cranelift's br_table doesn't support them
+        // We then proceed to split the edges going out of the br_table
+        let return_count = jump_args_count;
+        let mut dest_block_sequence = vec![];
+        let mut dest_block_map = HashMap::new();
+        for depth in targets {
+            let branch_block = match dest_block_map.entry(depth as usize) {
+                hash_map::Entry::Occupied(entry) => *entry.get(),
+                hash_map::Entry::Vacant(entry) => {
+                    let block = builder.create_block();
+                    dest_block_sequence.push((depth as usize, block));
+                    *entry.insert(block)
+                }
+            };
+            data.push_entry(branch_block);
+        }
+        let default_branch_block = match dest_block_map.entry(default as usize) {
+            hash_map::Entry::Occupied(entry) => *entry.get(),
+            hash_map::Entry::Vacant(entry) => {
+                let block = builder.create_block();
+                dest_block_sequence.push((default as usize, block));
+                *entry.insert(block)
+            }
+        };
+        let jt = builder.create_jump_table(data);
+        builder.ins().br_table(val, default_branch_block, jt);
+        for (depth, dest_block) in dest_block_sequence {
+            builder.switch_to_block(dest_block);
+            builder.seal_block(dest_block);
+            let real_dest_block = {
+                let i = state.control_stack.len() - 1 - depth;
+                let frame = &mut state.control_stack[i];
+                frame.set_branched_to_exit();
+                frame.br_destination()
+            };
+            let destination_args = state.peekn_mut(return_count);
+            canonicalise_then_jump(builder, real_dest_block, destination_args);
+        }
+        state.popn(return_count);
+    }
+    state.reachable = false;
     Ok(())
 }
 
