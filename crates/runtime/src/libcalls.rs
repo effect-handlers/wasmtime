@@ -54,6 +54,7 @@
 //! }
 //! ```
 
+use crate::continuation::Continuation;
 use crate::externref::VMExternRef;
 use crate::instance::Instance;
 use crate::table::{Table, TableElementType};
@@ -65,7 +66,6 @@ use std::ptr::{self, NonNull};
 use wasmtime_environ::{
     DataIndex, ElemIndex, FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TrapCode,
 };
-use wasmtime_fiber::{Fiber, FiberStack, Suspend};
 
 /// Actually public trampolines which are used by the runtime as the entrypoint
 /// for libcalls.
@@ -348,39 +348,16 @@ unsafe fn ref_func(vmctx: *mut VMContext, func_index: u32) -> *mut u8 {
 // Implementation of `cont.new`.
 unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
     let func = func as *mut VMCallerCheckedAnyfunc;
-    let fiber = Box::new(
-        Fiber::new(
-            FiberStack::new(4096).unwrap(),
-            move |first_resumption: (), suspend: &Suspend<_, (), _>| {
-                let trampoline = mem::transmute::<
-                    *const VMFunctionBody,
-                    unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
-                >((*func).func_ptr.as_ptr());
-                let trampoline = prepare_host_to_wasm_trampoline(vmctx, trampoline);
-                trampoline((*func).vmctx, vmctx);
-            },
-        )
-        .unwrap(),
-    );
-    let ptr: *mut Fiber<'static, (), (), ()> = Box::into_raw(fiber);
-    ptr as *mut _
+    Continuation::new(vmctx, func).as_erased_ptr()
 }
 
 // Implementation of `resume`.
-unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
-    let inst = vmctx.as_mut().unwrap().instance_mut();
-    let cont = cont as *mut Fiber<'static, (), (), ()>;
-    let cont_stack = &cont.as_ref().unwrap().stack;
-    cont_stack.write_parent(inst.tsp());
-    inst.set_tsp(cont_stack.top().unwrap());
-    (*(*(*(*vmctx).instance().store()).vmruntime_limits())
-        .stack_limit
-        .get_mut()) = 0;
-    match cont.as_mut().unwrap().resume(()) {
-        Ok(res) => (),
-        Err(y) => (),
+unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) -> Result<u32, TrapReason> {
+    let cont = Continuation::from_erased_ptr(cont);
+    match cont.resume(vmctx) {
+        Ok(res) => Ok(0),
+        Err(y) => panic!("failed to resume"),
     }
-    //panic!("WELCOME BACK!");
 }
 
 // Implementation of `suspend`
