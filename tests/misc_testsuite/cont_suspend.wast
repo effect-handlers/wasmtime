@@ -15,7 +15,10 @@
     (call $print (i32.const 1))
     (ref.func $f)
     (cont.new (type $ct))
-    (resume)
+    (block $l (param (ref $ct)) (result (ref $ct))
+      (resume (tag $h $l))
+      unreachable)
+    (drop)
     (call $print (i32.const 3)))
 )
 

@@ -2013,10 +2013,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::Resume { resumetable } => {
             let c = state.pop1();
             let jmpn = environ.translate_resume(builder.cursor(), c)?;
+            // This assumes c will be modified in-place
+            state.push1(c);
             state.push1(jmpn);
 
-            let targets = todo!("some_calculation_of_resumetable");
-            translate_br_table(builder, state, targets, 0);
+            let targets = vec![0]; // TODO
+            translate_br_table(builder, state, targets, 0)?;
         }
         Operator::Suspend { tag_index } => {
             //let _c = state.pop1();
