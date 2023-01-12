@@ -33,7 +33,6 @@ mod trampolines;
 
 #[cfg(feature = "component-model")]
 pub mod component;
-mod continuation;
 mod export;
 mod externref;
 mod imports;
