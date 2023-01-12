@@ -122,7 +122,18 @@ pub fn block_with_params<PE: TargetEnvironment + ?Sized>(
                 builder.append_block_param(block, ir::types::F64);
             }
             wasmparser::ValType::Ref(rt) => {
-                builder.append_block_param(block, environ.reference_type(rt.heap_type.try_into()?));
+                // TODO: huge warning!  this is bypassing the fact that
+                // WasmHeapType needs additional information to determine the
+                // true type of a wasmparser index.  We sidestep it by saying
+                // that **ON x86-64 LINUX**, we assume that *both typed functions
+                // and continuations have the same reference type as untyped
+                // functions*.  On other platforms (or even this platform in
+                // the future), *this may be incorrect*
+                let ht = match rt.heap_type {
+                    wasmparser::HeapType::TypedFunc(_) => wasmparser::HeapType::Func,
+                    x => x,
+                };
+                builder.append_block_param(block, environ.reference_type(ht.try_into()?));
             }
             wasmparser::ValType::V128 => {
                 builder.append_block_param(block, ir::types::I8X16);
