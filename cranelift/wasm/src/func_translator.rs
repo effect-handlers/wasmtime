@@ -8,6 +8,7 @@ use crate::code_translator::{bitcast_wasm_returns, translate_operator};
 use crate::environ::FuncEnvironment;
 use crate::state::FuncTranslationState;
 use crate::translation_utils::get_vmctx_value_label;
+use crate::WasmHeapType;
 use crate::WasmResult;
 use core::convert::TryInto;
 use cranelift_codegen::entity::EntityRef;
@@ -205,9 +206,10 @@ fn declare_locals<FE: FuncEnvironment + ?Sized>(
             match rt.heap_type {
                 wasmparser::HeapType::Extern
                 | wasmparser::HeapType::Func
-                | wasmparser::HeapType::TypedFunc(_) => {
-                    environ.translate_ref_null(builder.cursor(), rt.heap_type.try_into()?)?
-                }
+                | wasmparser::HeapType::TypedFunc(_) => environ.translate_ref_null(
+                    builder.cursor(),
+                    WasmHeapType::unsafe_from_heap_type(rt.heap_type)?,
+                )?,
                 _ => todo!("Implement HeapType::Bot in declare_locals."), // TODO(dhil) fixme
             }
         }

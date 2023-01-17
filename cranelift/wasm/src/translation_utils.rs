@@ -1,5 +1,6 @@
 //! Helper functions and structures for the translation.
 use crate::environ::TargetEnvironment;
+use crate::WasmHeapType;
 use crate::WasmResult;
 use core::convert::TryInto;
 use core::u32;
@@ -122,18 +123,10 @@ pub fn block_with_params<PE: TargetEnvironment + ?Sized>(
                 builder.append_block_param(block, ir::types::F64);
             }
             wasmparser::ValType::Ref(rt) => {
-                // TODO: huge warning!  this is bypassing the fact that
-                // WasmHeapType needs additional information to determine the
-                // true type of a wasmparser index.  We sidestep it by saying
-                // that **ON x86-64 LINUX**, we assume that *both typed functions
-                // and continuations have the same reference type as untyped
-                // functions*.  On other platforms (or even this platform in
-                // the future), *this may be incorrect*
-                let ht = match rt.heap_type {
-                    wasmparser::HeapType::TypedFunc(_) => wasmparser::HeapType::Func,
-                    x => x,
-                };
-                builder.append_block_param(block, environ.reference_type(ht.try_into()?));
+                builder.append_block_param(
+                    block,
+                    environ.reference_type(WasmHeapType::unsafe_from_heap_type(rt.heap_type)?),
+                );
             }
             wasmparser::ValType::V128 => {
                 builder.append_block_param(block, ir::types::I8X16);

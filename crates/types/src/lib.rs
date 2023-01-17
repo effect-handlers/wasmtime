@@ -203,6 +203,22 @@ impl WasmHeapType {
             },
         }
     }
+
+    /// TODO: huge warning!  this is bypassing the fact that
+    /// WasmHeapType needs additional information to determine the
+    /// true type of a wasmparser index.  We sidestep it by saying
+    /// that **ON x86-64 LINUX**, we assume that *both typed functions
+    /// and continuations have the same reference type as untyped
+    /// functions*.  On other platforms (or even this platform in
+    /// the future), *this may be incorrect*
+    #[deprecated]
+    pub fn unsafe_from_heap_type(ht: wasmparser::HeapType) -> Result<Self, WasmError> {
+        (match ht {
+            wasmparser::HeapType::TypedFunc(_) => wasmparser::HeapType::Func,
+            x => x,
+        })
+        .try_into()
+    }
 }
 
 impl From<WasmHeapType> for wasmparser::HeapType {

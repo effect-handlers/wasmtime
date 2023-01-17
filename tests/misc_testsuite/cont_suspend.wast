@@ -1,7 +1,6 @@
 ;; Small continuation resume test
 ;; expected output:
 ;; 1 : i32
-;; 2 : i32
 ;; 3 : i32
 (module
   (func $print (import "spectest" "print_i32") (param i32) (result))

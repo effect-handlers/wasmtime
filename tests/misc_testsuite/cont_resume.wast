@@ -1,3 +1,5 @@
+;; 8 9 10
+
 (module
   (func $print (import "spectest" "print_i32") (param i32) (result))
   (type $t1 (func))
