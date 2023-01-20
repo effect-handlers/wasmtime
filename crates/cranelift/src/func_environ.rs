@@ -1339,7 +1339,8 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             .ins()
             .call_indirect(builtin_sig, builtin_addr, &[vmctx, cont]);
 
-        Ok(pos.ins().iconst(I32, 0))
+        // 0 on suspend (TODO); 9999 on completion
+        Ok(pos.func.dfg.first_result(call_inst))
     }
 
     fn translate_suspend(

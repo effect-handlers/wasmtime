@@ -18,9 +18,6 @@
     (drop)
     (call $print (i32.const 10))
   )
-  (func (export "traps")
-    (resume (cont.new (type $c1) (ref.func $f2)))
-  )
 )
 
 (invoke "main")

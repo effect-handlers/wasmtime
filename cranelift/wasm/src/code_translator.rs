@@ -2017,8 +2017,37 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.push1(c);
             state.push1(jmpn);
 
-            let targets = vec![0]; // TODO
+            let targets = vec![1]; // TODO
+
+            // We wrap a br_table in a block so we can assign "just keep going"
+            // to the default value (9999 from libcall = br 0)
+            translate_operator(
+                validator,
+                &Operator::Block {
+                    // We want to keep a continuation on the stack for the
+                    // suspend cases. Even though in this case (return) we
+                    // simply drop / deallocate the continuation, we still need to
+                    // keep it around for the clif typechecking
+                    // TODO: i'm choosing some arbitrary type index here to
+                    // represent "a type index" because i believe clif doesn't
+                    // have any coarser type-checking and we simply drop the value
+                    blockty: wasmparser::BlockType::Type(wasmparser::ValType::Ref(
+                        wasmparser::RefType {
+                            nullable: false,
+                            heap_type: 1.try_into().unwrap(),
+                        },
+                    )),
+                },
+                builder,
+                state,
+                environ,
+            )?;
             translate_br_table(builder, state, targets, 0)?;
+            translate_operator(validator, &Operator::End, builder, state, environ)?;
+            // We kept a continuation on the stack for the suspend cases, but
+            // on return we have no continuation. so drop that continuation that
+            // is now completely invalidated (something about deallocate?)
+            translate_operator(validator, &Operator::Drop, builder, state, environ)?;
         }
         Operator::Suspend { tag_index } => {
             //let _c = state.pop1();

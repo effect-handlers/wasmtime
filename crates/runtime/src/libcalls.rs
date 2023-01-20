@@ -367,7 +367,7 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
 }
 
 // Implementation of `resume`.
-unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
+unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) -> Result<u32, TrapReason> {
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let cont = cont as *mut Fiber<'static, (), (), ()>;
     let cont_stack = &cont.as_ref().unwrap().stack;
@@ -377,10 +377,9 @@ unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) {
         .stack_limit
         .get_mut()) = 0;
     match cont.as_mut().unwrap().resume(()) {
-        Ok(res) => (),
-        Err(y) => (),
+        Ok(res) => Ok(9999),
+        Err(y) => Ok(0),
     }
-    //panic!("WELCOME BACK!");
 }
 
 // Implementation of `suspend`

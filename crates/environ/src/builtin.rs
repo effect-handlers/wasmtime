@@ -50,7 +50,7 @@ macro_rules! foreach_builtin_function {
             /// Create a new continuation from a funcref
             cont_new(vmctx: vmctx, r: pointer) -> pointer;
             /// Resume a continuation
-            resume(vmctx: vmctx, r: pointer);
+            resume(vmctx: vmctx, r: pointer) -> i32;
             /// Suspend a computation
             suspend(vmctx: vmctx);
             /// Invoked when fuel has run out while executing a function.
