@@ -1346,14 +1346,16 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_suspend(
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
-        _tag_index: u32,
+        tag_index: u32,
     ) {
         let builtin_index = BuiltinFunctionIndex::suspend();
         let builtin_sig = self.builtin_function_signatures.suspend(&mut pos.func);
         let (vmctx, builtin_addr) =
             self.translate_load_builtin_function_address(&mut pos, builtin_index);
 
-        let call_inst = pos.ins().call_indirect(builtin_sig, builtin_addr, &[vmctx]);
+        let tag_index = pos.ins().iconst(I32, tag_index as i64);
+        pos.ins()
+            .call_indirect(builtin_sig, builtin_addr, &[vmctx, tag_index]);
     }
 
     fn translate_custom_global_get(

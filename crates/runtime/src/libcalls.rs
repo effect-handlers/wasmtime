@@ -351,7 +351,7 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
     let fiber = Box::new(
         Fiber::new(
             FiberStack::new(4096).unwrap(),
-            move |first_resumption: (), suspend: &Suspend<_, (), _>| {
+            move |_first_resumption: (), _suspend: &Suspend<_, u32, _>| {
                 let trampoline = mem::transmute::<
                     *const VMFunctionBody,
                     unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext),
@@ -362,14 +362,14 @@ unsafe fn cont_new(vmctx: *mut VMContext, func: *mut u8) -> *mut u8 {
         )
         .unwrap(),
     );
-    let ptr: *mut Fiber<'static, (), (), ()> = Box::into_raw(fiber);
+    let ptr: *mut Fiber<'static, (), u32, ()> = Box::into_raw(fiber);
     ptr as *mut _
 }
 
 // Implementation of `resume`.
 unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) -> Result<u32, TrapReason> {
     let inst = vmctx.as_mut().unwrap().instance_mut();
-    let cont = cont as *mut Fiber<'static, (), (), ()>;
+    let cont = cont as *mut Fiber<'static, (), u32, ()>;
     let cont_stack = &cont.as_ref().unwrap().stack;
     cont_stack.write_parent(inst.tsp());
     inst.set_tsp(cont_stack.top().unwrap());
@@ -377,19 +377,19 @@ unsafe fn resume(vmctx: *mut VMContext, cont: *mut u8) -> Result<u32, TrapReason
         .stack_limit
         .get_mut()) = 0;
     match cont.as_mut().unwrap().resume(()) {
-        Ok(res) => Ok(9999),
-        Err(y) => Ok(0),
+        Ok(_) => Ok(9999),
+        Err(y) => Ok(y),
     }
 }
 
 // Implementation of `suspend`
-unsafe fn suspend(vmctx: *mut VMContext) {
+unsafe fn suspend(vmctx: *mut VMContext, tag_index: u32) {
     let inst = vmctx.as_mut().unwrap().instance_mut();
     let stack_ptr = inst.tsp();
     let parent = stack_ptr.cast::<*mut u8>().offset(-2).read();
     inst.set_tsp(parent);
     let suspend = wasmtime_fiber::unix::Suspend::from_top_ptr(stack_ptr);
-    suspend.switch::<(), (), ()>(wasmtime_fiber::RunResult::Yield(()))
+    suspend.switch::<(), u32, ()>(wasmtime_fiber::RunResult::Yield(tag_index))
 }
 
 // Implementation of `data.drop`.

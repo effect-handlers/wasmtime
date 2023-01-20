@@ -2017,7 +2017,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.push1(c);
             state.push1(jmpn);
 
-            let targets = vec![1]; // TODO
+            let mut targets = vec![];
+            for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
+                let tag = tag as usize;
+                if targets.len() <= tag {
+                    targets.resize(tag + 1, 0) // it's okay to put zeroes because typechecker ensured this makes sense
+                }
+                targets[tag] = label + 1; // We add 1 because of our silly extra block desugar below
+            }
 
             // We wrap a br_table in a block so we can assign "just keep going"
             // to the default value (9999 from libcall = br 0)
@@ -2050,7 +2057,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             translate_operator(validator, &Operator::Drop, builder, state, environ)?;
         }
         Operator::Suspend { tag_index } => {
-            //let _c = state.pop1();
             environ.translate_suspend(builder.cursor(), *tag_index);
         }
         Operator::ContBind { type_index: _ }

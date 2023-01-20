@@ -52,7 +52,7 @@ macro_rules! foreach_builtin_function {
             /// Resume a continuation
             resume(vmctx: vmctx, r: pointer) -> i32;
             /// Suspend a computation
-            suspend(vmctx: vmctx);
+            suspend(vmctx: vmctx, t: i32);
             /// Invoked when fuel has run out while executing a function.
             out_of_gas(vmctx: vmctx);
             /// Invoked when we reach a new epoch.
