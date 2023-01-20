@@ -10,7 +10,6 @@ use crate::state::FuncTranslationState;
 use crate::translation_utils::get_vmctx_value_label;
 use crate::WasmHeapType;
 use crate::WasmResult;
-use core::convert::TryInto;
 use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::{self, Block, InstBuilder, ValueLabel};
 use cranelift_codegen::timing;

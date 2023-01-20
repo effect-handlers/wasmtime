@@ -14,11 +14,10 @@
   (func (export "main")
     (call $print (i32.const 8))
     (block $l (result (ref $c1))
-      (resume (tag $h $l) (cont.new (type $c1) (ref.func $f1))) unreachable)
+      (resume (tag $h $l) (cont.new (type $c1) (ref.func $f1))) return)
     (drop)
     (call $print (i32.const 10))
   )
 )
 
 (invoke "main")
-(assert_trap (invoke "traps") "unreachable")

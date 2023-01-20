@@ -383,15 +383,15 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         Ok(())
     }
 
-    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value> {
+    fn translate_cont_new(&mut self, _pos: FuncCursor, _func: ir::Value) -> WasmResult<ir::Value> {
         todo!();
     }
 
-    fn translate_resume(&mut self, pos: FuncCursor, cont: ir::Value) -> WasmResult<ir::Value> {
+    fn translate_resume(&mut self, _pos: FuncCursor, _cont: ir::Value) -> WasmResult<ir::Value> {
         todo!();
     }
 
-    fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32) {
+    fn translate_suspend(&mut self, _pos: FuncCursor, _tag_index: u32) {
         todo!();
     }
 
