@@ -225,12 +225,15 @@ impl Backtrace {
         // The stack grows down, and therefore any frame pointer we are
         // dealing with should be less than the stack pointer on entry
         // to Wasm.
-        assert!(first_wasm_sp >= fp, "{first_wasm_sp:#x} >= {fp:#x}");
+        // TODO: these assertions no longer hold in continuations land. rethink
+        //assert!(first_wasm_sp >= fp, "{first_wasm_sp:#x} >= {fp:#x}");
 
-        arch::assert_entry_sp_is_aligned(first_wasm_sp);
+        // TODO: these assertions no longer hold in continuations land. rethink
+        //arch::assert_entry_sp_is_aligned(first_wasm_sp);
 
         loop {
-            arch::assert_fp_is_aligned(fp);
+            // TODO: these assertions no longer hold in continuations land. rethink
+            // arch::assert_fp_is_aligned(fp);
 
             log::trace!("--- Tracing through one Wasm frame ---");
             log::trace!("pc = {:p}", pc as *const ());
@@ -263,7 +266,8 @@ impl Backtrace {
             let next_older_fp = *(fp as *mut usize).add(arch::NEXT_OLDER_FP_FROM_FP_OFFSET);
             // Because the stack always grows down, the older FP must be greater
             // than the current FP.
-            assert!(next_older_fp > fp, "{next_older_fp:#x} > {fp:#x}");
+            // TODO: these assertions no longer hold in continuations land. rethink
+            //assert!(next_older_fp > fp, "{next_older_fp:#x} > {fp:#x}");
             fp = next_older_fp;
         }
     }
