@@ -175,9 +175,9 @@ winch-test-macros = { path = "winch/test-macros" }
 
 target-lexicon = { version = "0.12.3", default-features = false, features = ["std"] }
 anyhow = "1.0.22"
-wasmparser = { git = "https://github.com/dhil/wasm-tools", branch = "typed-continuations-changes" }
+wasmparser = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations" }
 wat = "1.0.61"
-wast = { git = "https://github.com/dhil/wasm-tools", branch = "typed-continuations-changes" }
+wast = { git = "https://github.com/effect-handlers/wasm-tools", branch = "typed-continuations" }
 wasmprinter = "0.2.54"
 wasm-encoder = "0.25.0"
 wasm-smith = "0.12.5"

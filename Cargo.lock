@@ -665,7 +665,7 @@ dependencies = [
  "target-lexicon",
  "thiserror",
  "toml",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wat",
 ]
 
@@ -840,7 +840,7 @@ dependencies = [
  "serde",
  "smallvec",
  "target-lexicon",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime-types",
  "wat",
 ]
@@ -3603,7 +3603,7 @@ dependencies = [
 [[package]]
 name = "wasm-encoder"
 version = "0.25.0"
-source = "git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes#df9ee8c37033af028e9357aa49a1d8851f35b346"
+source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations#b2d409793176e0e9ba47770be38f2282fcc42aac"
 dependencies = [
  "leb128",
 ]
@@ -3687,7 +3687,7 @@ dependencies = [
 [[package]]
 name = "wasmparser"
 version = "0.102.0"
-source = "git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes#df9ee8c37033af028e9357aa49a1d8851f35b346"
+source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations#b2d409793176e0e9ba47770be38f2282fcc42aac"
 dependencies = [
  "indexmap",
  "url",
@@ -3733,7 +3733,7 @@ dependencies = [
  "target-lexicon",
  "tempfile",
  "wasi-cap-std-sync",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime-cache",
  "wasmtime-component-macro",
  "wasmtime-component-util",
@@ -3848,7 +3848,7 @@ dependencies = [
  "test-programs",
  "tokio",
  "wasm-coredump-builder",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime",
  "wasmtime-cache",
  "wasmtime-cli-flags",
@@ -3863,7 +3863,7 @@ dependencies = [
  "wasmtime-wasi-nn",
  "wasmtime-wasi-threads",
  "wasmtime-wast",
- "wast 55.0.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wast 55.0.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wat",
  "windows-sys 0.45.0",
 ]
@@ -3916,7 +3916,7 @@ dependencies = [
  "object",
  "target-lexicon",
  "thiserror",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime-cranelift-shared",
  "wasmtime-environ",
 ]
@@ -3952,7 +3952,7 @@ dependencies = [
  "target-lexicon",
  "thiserror",
  "wasm-encoder 0.25.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmprinter",
  "wasmtime-component-util",
  "wasmtime-types",
@@ -3967,7 +3967,7 @@ dependencies = [
  "component-fuzz-util",
  "env_logger 0.9.3",
  "libfuzzer-sys",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmprinter",
  "wasmtime-environ",
  "wat",
@@ -4045,7 +4045,7 @@ dependencies = [
  "wasm-smith",
  "wasm-spec-interpreter",
  "wasmi",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmprinter",
  "wasmtime",
  "wasmtime-wast",
@@ -4125,7 +4125,7 @@ dependencies = [
  "cranelift-entity",
  "serde",
  "thiserror",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
 ]
 
 [[package]]
@@ -4199,7 +4199,7 @@ dependencies = [
  "anyhow",
  "log",
  "wasmtime",
- "wast 55.0.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wast 55.0.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
 ]
 
 [[package]]
@@ -4211,7 +4211,7 @@ dependencies = [
  "gimli",
  "object",
  "target-lexicon",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime-cranelift-shared",
  "wasmtime-environ",
  "winch-codegen",
@@ -4251,12 +4251,12 @@ dependencies = [
 [[package]]
 name = "wast"
 version = "55.0.0"
-source = "git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes#df9ee8c37033af028e9357aa49a1d8851f35b346"
+source = "git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations#b2d409793176e0e9ba47770be38f2282fcc42aac"
 dependencies = [
  "leb128",
  "memchr",
  "unicode-width",
- "wasm-encoder 0.25.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasm-encoder 0.25.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
 ]
 
 [[package]]
@@ -4393,14 +4393,14 @@ dependencies = [
  "regalloc2",
  "smallvec",
  "target-lexicon",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
 ]
 
 [[package]]
 name = "winch-environ"
 version = "0.7.0"
 dependencies = [
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime-environ",
  "winch-codegen",
 ]
@@ -4446,7 +4446,7 @@ dependencies = [
  "similar",
  "target-lexicon",
  "toml",
- "wasmparser 0.102.0 (git+https://github.com/dhil/wasm-tools?branch=typed-continuations-changes)",
+ "wasmparser 0.102.0 (git+https://github.com/effect-handlers/wasm-tools?branch=typed-continuations)",
  "wasmtime-environ",
  "wat",
  "winch-codegen",
