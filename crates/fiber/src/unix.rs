@@ -32,9 +32,9 @@
 #![allow(unused_macros)]
 
 use crate::RunResult;
+use std::alloc::{alloc, dealloc, Layout};
 use std::cell::Cell;
 use std::io;
-use std::ptr;
 
 #[derive(Debug)]
 pub struct FiberStack {
@@ -49,32 +49,20 @@ impl FiberStack {
     pub fn new(size: usize) -> io::Result<Self> {
         // Round up our stack size request to the nearest multiple of the
         // page size.
-        let page_size = rustix::param::page_size();
-        let size = if size == 0 {
-            page_size
-        } else {
-            (size + (page_size - 1)) & (!(page_size - 1))
-        };
+        //let page_size = rustix::param::page_size();
+        //let size = if size == 0 {
+        //    page_size
+        //} else {
+        //    (size + (page_size - 1)) & (!(page_size - 1))
+        //};
 
         unsafe {
-            // Add in one page for a guard page and then ask for some memory.
-            let mmap_len = size + page_size;
-            let mmap = rustix::mm::mmap_anonymous(
-                ptr::null_mut(),
-                mmap_len,
-                rustix::mm::ProtFlags::empty(),
-                rustix::mm::MapFlags::PRIVATE,
-            )?;
-
-            rustix::mm::mprotect(
-                mmap.cast::<u8>().add(page_size).cast(),
-                size,
-                rustix::mm::MprotectFlags::READ | rustix::mm::MprotectFlags::WRITE,
-            )?;
+            let layout = Layout::array::<u8>(size).unwrap();
+            let top = alloc(layout);
 
             Ok(Self {
-                top: mmap.cast::<u8>().add(mmap_len),
-                len: Some(mmap_len),
+                top: top.add(size),
+                len: Some(size),
             })
         }
     }
@@ -100,8 +88,8 @@ impl Drop for FiberStack {
     fn drop(&mut self) {
         unsafe {
             if let Some(len) = self.len {
-                let ret = rustix::mm::munmap(self.top.sub(len) as _, len);
-                debug_assert!(ret.is_ok());
+                let layout = Layout::array::<u8>(len).unwrap();
+                dealloc(self.top.sub(len), layout);
             }
         }
     }
