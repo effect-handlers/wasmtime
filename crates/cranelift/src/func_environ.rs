@@ -2203,6 +2203,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_cont_new(
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
+        _state: &FuncTranslationState,
         func: ir::Value,
     ) -> WasmResult<ir::Value> {
         let builtin_index = BuiltinFunctionIndex::cont_new();
@@ -2219,6 +2220,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_resume(
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
+        _state: &FuncTranslationState,
         cont: ir::Value,
         _call_args: &[ir::Value],
     ) -> WasmResult<ir::Value> {
@@ -2238,6 +2240,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_resume_throw(
         &mut self,
         _pos: FuncCursor,
+        _state: &FuncTranslationState,
         _tag_index: u32,
         _cont: ir::Value,
     ) -> WasmResult<ir::Value> {
@@ -2247,6 +2250,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn translate_suspend(
         &mut self,
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
+        _state: &FuncTranslationState,
         tag_index: u32,
     ) {
         let builtin_index = BuiltinFunctionIndex::suspend();
