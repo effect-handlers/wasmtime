@@ -91,6 +91,10 @@ pub struct VMOffsets<P> {
     defined_globals: u32,
     defined_func_refs: u32,
     size: u32,
+
+    // NOTE(dhil): The following field is used as "global" to store
+    // the arguments of continuations and payloads of suspensions.
+    typed_continuations_store: u32,
 }
 
 /// Trait used for the `ptr` representation of the field of `VMOffsets`
@@ -352,6 +356,7 @@ impl<P: PtrSize> VMOffsets<P> {
         }
 
         calculate_sizes! {
+            typed_continuations_store: "typed continuations store",
             defined_func_refs: "module functions",
             defined_globals: "defined globals",
             owned_memories: "owned memories",
@@ -366,7 +371,7 @@ impl<P: PtrSize> VMOffsets<P> {
             store: "jit store state",
             externref_activations_table: "jit host externref state",
             epoch_ptr: "jit current epoch state",
-            callee: "callee function pointer",
+            callee:  "callee function pointer",
             runtime_limits: "jit runtime limits state",
             magic: "magic value",
         }
@@ -404,6 +409,7 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
             defined_globals: 0,
             defined_func_refs: 0,
             size: 0,
+            typed_continuations_store: 0,
         };
 
         // Convenience functions for checked addition and multiplication.
@@ -466,6 +472,11 @@ impl<P: PtrSize> From<VMOffsetsFields<P>> for VMOffsets<P> {
                 ret.num_escaped_funcs,
                 ret.ptr.size_of_vm_func_ref(),
             ),
+            size(typed_continuations_store)
+                = ret.ptr.size(),
+            align(16), // TODO(dhil): This could probably be done more
+                       // efficiently by packing the pointer into the above 16 byte
+                       // alignment
         }
 
         ret.size = next_field_offset;
@@ -728,6 +739,12 @@ impl<P: PtrSize> VMOffsets<P> {
     #[inline]
     pub fn vmctx_builtin_functions(&self) -> u32 {
         self.builtin_functions
+    }
+
+    /// The offset of the typed continuations store.
+    #[inline]
+    pub fn vmctx_typed_continuations_store(&self) -> u32 {
+        self.typed_continuations_store
     }
 
     /// Return the size of the `VMContext` allocation.
