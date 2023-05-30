@@ -564,12 +564,13 @@ pub trait FuncEnvironment: TargetEnvironment {
     }
 
     /// TODO(dhil): write documentation.
-    fn translate_cont_new(&mut self, pos: FuncCursor, func: ir::Value) -> WasmResult<ir::Value>;
+    fn translate_cont_new(&mut self, pos: FuncCursor, state: &FuncTranslationState, func: ir::Value) -> WasmResult<ir::Value>;
 
     /// TODO(dhil): write documentation.
     fn translate_resume(
         &mut self,
         pos: FuncCursor,
+        state: &FuncTranslationState,
         cont: ir::Value,
         call_args: &[ir::Value],
     ) -> WasmResult<ir::Value>;
@@ -578,12 +579,13 @@ pub trait FuncEnvironment: TargetEnvironment {
     fn translate_resume_throw(
         &mut self,
         pos: FuncCursor,
+        state: &FuncTranslationState,
         tag_index: u32,
         cont: ir::Value,
     ) -> WasmResult<ir::Value>;
 
     /// TODO(dhil): write documentation.
-    fn translate_suspend(&mut self, pos: FuncCursor, tag_index: u32);
+    fn translate_suspend(&mut self, pos: FuncCursor, state: &FuncTranslationState, tag_index: u32);
 
     /// TODO
     fn continuation_arity(&self, type_index: u32) -> usize;
