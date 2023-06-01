@@ -146,3 +146,16 @@ pub fn suspend_block<PE: TargetEnvironment + ?Sized>(
 
     Ok(block)
 }
+
+/// Create a synthetic return block (used to wrap the return
+/// continuation of resume).
+pub fn return_block<PE: TargetEnvironment + ?Sized>(
+    builder: &mut FunctionBuilder,
+    environ: &PE,
+) -> WasmResult<ir::Block> {
+    let block = builder.create_block();
+    // Pointer to return payload.
+    builder.append_block_param(block, environ.pointer_type());
+
+    Ok(block)
+}

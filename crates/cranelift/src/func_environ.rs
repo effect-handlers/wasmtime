@@ -2249,8 +2249,12 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let typed_cont_store_offset = i32::try_from(self.offsets.vmctx_typed_continuations_store()).unwrap();
         let typed_cont_store_addr = builder.ins().load(pointer_type, mem_flags, base, typed_cont_store_offset);
-        let result_addr = builder.ins().load(pointer_type, mem_flags, base, typed_cont_store_offset);
         let cont_addr = typed_cont_store_addr;
+
+        let typed_cont_payloads_offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
+        let payloads_addr = builder.ins().load(pointer_type, mem_flags, base, typed_cont_payloads_offset);
+        println!("cont_addr: {:?}, payloads_addr: {:?}", cont_addr, payloads_addr);
+
 
         if call_args.len() == 0 { // OK
         } else if call_args.len() == 1 {
@@ -2298,11 +2302,12 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let result = builder.func.dfg.first_result(call_inst);
 
         // Bit twiddling
-        let signal_mask = 0b1000_0000_0000_0000_0000_0000_0000_0000;
+        let signal_mask = 0xf000_0000;
+        let inverse_signal_mask = 0x0fff_ffff;
         let signal = builder.ins().band_imm(result, signal_mask);
-        let real_result = builder.ins().band_imm(result, !signal_mask);
+        let real_result = builder.ins().band_imm(result, inverse_signal_mask);
 
-        Ok((cont_addr, result_addr, signal, real_result))
+        Ok((cont_addr, payloads_addr, signal, real_result))
     }
 
     fn translate_resume_throw(
@@ -2341,7 +2346,42 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         self.types[idx].returns()
     }
 
+    fn unbox_values(&self, builder: &mut FunctionBuilder, valtypes: &[WasmType], base_addr: ir::Value) -> Vec<ir::Value> {
+        let mut values = vec![];
+        if valtypes.len() == 0 {
+            // OK
+        } else if valtypes.len() == 1 {
+            values.push(type_directed_load(builder, convert_type(valtypes[0]), self.vmctx(&mut builder.func), i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap().into()))
+        } else {
+            panic!("Unsupported continuation arity!");
+        }
+        values
+    }
+
     fn use_x86_blendv_for_relaxed_laneselect(&self, ty: Type) -> bool {
         self.isa.has_x86_blendv_lowering(ty)
+    }
+}
+
+fn convert_type(ty: WasmType) -> ir::Type {
+    match ty {
+        WasmType::I32 => ir::types::I32,
+        WasmType::I64 => ir::types::I64,
+        _ => todo!(),
+    }
+}
+
+fn type_directed_load(builder: &mut FunctionBuilder, ty: ir::Type, base: ir::Value, offset: Offset32) -> ir::Value {
+    let memflags = ir::MemFlags::trusted().with_readonly();
+    match ty {
+        ir::types::I32 => {
+            println!("base: {:?}", base);
+            builder.ins().load(I32, memflags, base, offset)
+        }
+        ir::types::I64 => {
+            println!("base: {:?}", base);
+            builder.ins().load(I64, memflags, base, offset)
+        }
+        _ => todo!(),
     }
 }

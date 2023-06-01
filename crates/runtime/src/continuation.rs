@@ -127,11 +127,11 @@ pub fn cont_new(instance: &mut Instance, func: *mut u8) -> *mut u8 {
     let fiber = Box::new(
         Fiber::new(
             FiberStack::new(4096).unwrap(),
-            move |first_val: (), _suspend: &Suspend<_, u32, _>| {
+            move |first_val: (), _suspend: &Suspend<_, u32, u32>| {
                 let trampoline = unsafe {
                     std::mem::transmute::<
                         *const VMFunctionBody,
-                        unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext, ()),
+                        unsafe extern "C" fn(*mut VMOpaqueContext, *mut VMContext, ()) -> u32,
                     >(fnptr)
                 };
                 let trampoline = unsafe { prepare_host_to_wasm_trampoline(vmctx2, trampoline) };
@@ -140,14 +140,14 @@ pub fn cont_new(instance: &mut Instance, func: *mut u8) -> *mut u8 {
         )
         .unwrap(),
     );
-    let ptr: *mut Fiber<'static, (), u32, ()> = Box::into_raw(fiber);
+    let ptr: *mut Fiber<'static, (), u32, u32> = Box::into_raw(fiber);
     ptr as *mut _
 }
 
 /// TODO
 #[inline(always)]
 pub fn resume(instance: &mut Instance, cont: *mut u8) -> Result<u32, TrapReason> {
-    let cont = cont as *mut Fiber<'static, (), u32, ()>;
+    let cont = cont as *mut Fiber<'static, (), u32, u32>;
     let cont_stack = unsafe { &cont.as_ref().unwrap().stack() };
     let tsp = TopOfStackPointer::as_raw(instance.tsp());
     unsafe { cont_stack.write_parent(tsp) };
@@ -158,16 +158,23 @@ pub fn resume(instance: &mut Instance, cont: *mut u8) -> Result<u32, TrapReason>
             .get_mut()) = 0
     };
     match unsafe { cont.as_mut().unwrap().resume(()) } {
-        Ok(_) => {
+        Ok(result) => {
             let drop_box: Box<Fiber<_, _, _>> = unsafe { Box::from_raw(cont) };
             drop(drop_box); // I think this would be covered by the close brace below anyway
+            // Store the result.
+            let payloads_addr = unsafe { instance.get_typed_continuations_payloads_mut() };
+            unsafe {
+                println!("result: {:?}", result);
+                std::ptr::write(payloads_addr, result);
+            }
+
             Ok(0) // zero value = return normally.
             //Ok(9999)
         }
         Err(tag) => {
             // We set the high bit to signal a return via suspend. We
             // encode the tag into the remainder of the integer.
-            let signal_mask = 0b1000_0000_0000_0000_0000_0000_0000_0000;
+            let signal_mask = 0xf000_0000;
             debug_assert_eq!(tag & signal_mask, 0);
             Ok(tag | signal_mask)
         }, // 0 = suspend //Ok(y),
