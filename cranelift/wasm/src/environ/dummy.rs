@@ -679,11 +679,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
 
     fn translate_resume(
         &mut self,
-        _pos: FuncCursor,
+        _builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
-        _cont: ir::Value,
-        _call_args: &[ir::Value],
-    ) -> WasmResult<ir::Value> {
+        _resume_args: &[ir::Value],
+    ) -> WasmResult<(ir::Value, ir::Value, ir::Value, ir::Value)> {
         todo!()
     }
 
@@ -702,6 +701,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
     }
 
     fn continuation_arity(&self, _type_index: u32) -> usize {
+        todo!()
+    }
+
+    fn continuation_returns(&self, _type_index: u32) -> &[WasmType] {
         todo!()
     }
 }

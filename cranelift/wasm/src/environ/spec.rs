@@ -569,11 +569,10 @@ pub trait FuncEnvironment: TargetEnvironment {
     /// TODO(dhil): write documentation.
     fn translate_resume(
         &mut self,
-        pos: FuncCursor,
+        builder: &mut FunctionBuilder,
         state: &FuncTranslationState,
-        cont: ir::Value,
-        call_args: &[ir::Value],
-    ) -> WasmResult<ir::Value>;
+        resume_args: &[ir::Value],
+    ) -> WasmResult<(ir::Value, ir::Value, ir::Value, ir::Value)>;
 
     /// TODO(dhil): write documentation.
     fn translate_resume_throw(
@@ -589,6 +588,9 @@ pub trait FuncEnvironment: TargetEnvironment {
 
     /// TODO
     fn continuation_arity(&self, type_index: u32) -> usize;
+
+    /// TODO
+    fn continuation_returns(&self, type_index: u32) -> &[wasmtime_types::WasmType];
 
     /// Returns whether the CLIF `x86_blendv` instruction should be used for the
     /// relaxed simd `*.relaxed_laneselect` instruction for the specified type.

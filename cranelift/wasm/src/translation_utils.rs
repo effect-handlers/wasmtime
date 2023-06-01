@@ -7,6 +7,7 @@ use cranelift_frontend::FunctionBuilder;
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 use wasmparser::{FuncValidator, WasmFuncType, WasmModuleResources};
+use wasmtime_types::WasmType;
 
 /// Get the parameter and result types for the given Wasm blocktype.
 pub fn blocktype_params_results<'a, T>(
@@ -96,4 +97,36 @@ pub fn f64_translation(x: wasmparser::Ieee64) -> ir::immediates::Ieee64 {
 pub fn get_vmctx_value_label() -> ir::ValueLabel {
     const VMCTX_LABEL: u32 = 0xffff_fffe;
     ir::ValueLabel::from_u32(VMCTX_LABEL)
+}
+
+/// Create a `Block` with the given Wasm parameters.
+pub fn block_with_params_wasmtype<PE: TargetEnvironment + ?Sized>(
+    builder: &mut FunctionBuilder,
+    params: &[WasmType],
+    environ: &PE,
+) -> WasmResult<ir::Block> {
+    let block = builder.create_block();
+    for ty in params {
+        match ty {
+            WasmType::I32 => {
+                builder.append_block_param(block, ir::types::I32);
+            }
+            WasmType::I64 => {
+                builder.append_block_param(block, ir::types::I64);
+            }
+            WasmType::F32 => {
+                builder.append_block_param(block, ir::types::F32);
+            }
+            WasmType::F64 => {
+                builder.append_block_param(block, ir::types::F64);
+            }
+            WasmType::Ref(rt) => {
+                builder.append_block_param(block, environ.reference_type(rt.heap_type));
+            }
+            WasmType::V128 => {
+                builder.append_block_param(block, ir::types::I8X16);
+            }
+        }
+    }
+    Ok(block)
 }
