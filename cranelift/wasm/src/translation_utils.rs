@@ -6,8 +6,8 @@ use cranelift_codegen::ir;
 use cranelift_frontend::FunctionBuilder;
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
-use wasmparser::{FuncValidator, WasmFuncType, WasmModuleResources};
-use wasmtime_types::WasmType;
+use wasmparser::{FuncValidator, WasmFuncType,  WasmModuleResources};
+use wasmtime_types::{WasmType, WasmHeapType};
 
 /// Get the parameter and result types for the given Wasm blocktype.
 pub fn blocktype_params_results<'a, T>(
@@ -128,5 +128,21 @@ pub fn block_with_params_wasmtype<PE: TargetEnvironment + ?Sized>(
             }
         }
     }
+    Ok(block)
+}
+
+/// Create a synthetic suspend block (used to wrap a resume table).
+pub fn suspend_block<PE: TargetEnvironment + ?Sized>(
+    builder: &mut FunctionBuilder,
+    environ: &PE,
+) -> WasmResult<ir::Block> {
+    let block = builder.create_block();
+    // Tag type
+    builder.append_block_param(block, ir::types::I32);
+    // Cont type
+    builder.append_block_param(block, environ.reference_type(WasmHeapType::Func));
+    // Payload pointer
+    // builder.append_block_param(block, environ.pointer_type());
+
     Ok(block)
 }
