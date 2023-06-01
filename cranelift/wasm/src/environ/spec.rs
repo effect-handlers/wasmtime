@@ -592,6 +592,9 @@ pub trait FuncEnvironment: TargetEnvironment {
     /// TODO
     fn continuation_returns(&self, type_index: u32) -> &[wasmtime_types::WasmType];
 
+    /// TODO
+    fn unbox_values(&self, builder: &mut FunctionBuilder, valtypes: &[wasmtime_types::WasmType], base_addr: ir::Value) -> std::vec::Vec<ir::Value>;
+
     /// Returns whether the CLIF `x86_blendv` instruction should be used for the
     /// relaxed simd `*.relaxed_laneselect` instruction for the specified type.
     fn use_x86_blendv_for_relaxed_laneselect(&self, ty: Type) -> bool {

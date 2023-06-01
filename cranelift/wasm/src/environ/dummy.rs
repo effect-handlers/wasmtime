@@ -707,6 +707,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
     fn continuation_returns(&self, _type_index: u32) -> &[WasmType] {
         todo!()
     }
+
+    fn unbox_values(&self, _builder: &mut FunctionBuilder, _valtypes: &[WasmType], _base_addr: ir::Value) -> Vec<ir::Value> {
+        todo!()
+    }
 }
 
 impl TypeConvert for DummyEnvironment {
