@@ -77,7 +77,7 @@ use super::{hash_map, HashMap};
 use crate::environ::{FuncEnvironment, GlobalVariable};
 use crate::state::{ControlStackFrame, ElseData, FuncTranslationState};
 use crate::translation_utils::{
-    block_with_params, blocktype_params_results, f32_translation, f64_translation,
+    block_with_params, block_with_params_wasmtype, blocktype_params_results, f32_translation, f64_translation,
 };
 use crate::wasm_unsupported;
 use crate::{FuncIndex, GlobalIndex, MemoryIndex, TableIndex, TypeIndex, WasmResult};
@@ -2415,50 +2415,141 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             type_index,
             resumetable,
         } => {
-            let _arity = environ.continuation_arity(*type_index);
-            //println!("arity: {}", _arity);
-            let call_args = vec![];
-            let cont = state.pop1();
-            let jmpn = environ.translate_resume(builder.cursor(), state, cont, &call_args)?;
-            // This assumes cont will be modified in-place
-            state.push1(cont);
-            state.push1(jmpn);
+            // Idea create wrapper block for handling suspends:
+            // (resume ...)
+            // (if returned_normally then return code else resumetable code)
 
-            let mut targets = vec![];
-            for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
-                let tag = tag as usize;
-                if targets.len() <= tag {
-                    targets.resize(tag + 1, 0) // it's okay to put zeroes because typechecker ensured this makes sense
-                }
-                targets[tag] = label + 1; // We add 1 because of our silly extra block desugar below
+            // First we pop the arguments off the stack and bundle
+            // them up. The arguments are laid out on the stack as
+            // follows.
+            //
+            //  [ arg1 ... argN cont ]
+            let arity = environ.continuation_arity(*type_index);
+            let resume_args = state.peekn(arity + 1);
+
+            // Now, we generate the call instruction.
+            let (payload_addr, results_addr, signal, tag) = environ.translate_resume(builder, state, &resume_args)?;
+            // The `payload_addr` is the address of payload object
+            // that will have been created by a return or suspend. The
+            // `result` is an integer indicating whether the `resume`
+            // returned through an ordinary return or a suspension.
+
+            // Pop the `resume_args` off the stack.
+            state.popn(arity+1);
+
+            // Now, construct blocks for the three continuations:
+            // 1) `resume` returned normally.
+            // 2) `resume` returned via a suspend.
+            // 3) `resume` is forwarding (TODO)
+
+            let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
+            let returns = environ.continuation_returns(*type_index);
+            let return_block = block_with_params_wasmtype(builder, returns, environ)?;
+            let suspend_block = builder.create_block();
+            let mut returns_vals = vec![];
+            if returns.len() == 0 {
+                // OK
+            } else if returns.len() == 1 {
+                returns_vals.push(results_addr);
+            } else {
+                panic!("Unsupported continuation arity!");
             }
+            canonicalise_brif(builder, is_zero, return_block, &returns_vals, suspend_block, &[]);
 
-            // We wrap a br_table in a block so we can assign "just keep going"
-            // to the default value (9999 from libcall = br 0)
-            translate_operator(
-                validator,
-                &Operator::Block {
-                    // We want to keep a continuation on the stack for the
-                    // suspend cases. Even though in this case (return) we
-                    // simply drop / deallocate the continuation, we still need to
-                    // keep it around for the clif typechecking
-                    // TODO: i'm choosing some arbitrary type index here to
-                    // represent "a type index" because i believe clif doesn't
-                    // have any coarser type-checking and we simply drop the value
-                    blockty: wasmparser::BlockType::Type(wasmparser::ValType::Ref(
-                        wasmparser::RefType::indexed_func(false, *type_index).unwrap(),
-                    )),
-                },
-                builder,
-                state,
-                environ,
-            )?;
-            translate_resume_table(builder, state, targets)?;
-            translate_operator(validator, &Operator::End, builder, state, environ)?;
+            // Next, build the resume table.
+            builder.switch_to_block(suspend_block);
+            builder.seal_block(suspend_block);
+            // Push the payloads
+            //state.push1(todo!());
+            // Push the continuation object
+            let cont = payload_addr;
+            state.push1(cont);
+            // Push the suspend tag.
+            state.push1(tag);
+
+            //translate_resume_table(builder, state, resumetable)?;
+            builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
+
+            // Now, finish the return block
+            builder.switch_to_block(return_block);
+            builder.seal_block(return_block);
+
+            // Push the results
+            state.push1(results_addr);
+
+            // let next_block = builder.create_block();
+            // let (params, results) = blocktype_params_results(validator, *blockty)?;
+            // let (destination, else_data) = if params.clone().eq(results.clone()) {
+            //     // It is possible there is no `else` block, so we will only
+            //     // allocate a block for it if/when we find the `else`. For now,
+            //     // we if the condition isn't true, then we jump directly to the
+            //     // destination block following the whole `if...end`. If we do end
+            //     // up discovering an `else`, then we will allocate a block for it
+            //     // and go back and patch the jump.
+            //     let destination = block_with_params(builder, results.clone(), environ)?;
+            //     let branch_inst = canonicalise_brif(
+            //         builder,
+            //         val,
+            //         next_block,
+            //         &[],
+            //         destination,
+            //         state.peekn(params.len()),
+            //     );
+            //     (
+            //         destination,
+            //         ElseData::NoElse {
+            //             branch_inst,
+            //             placeholder: destination,
+            //         },
+            //     )
+
+            // state.push1(payload_addr);
+            // state.push1(result);
+
+
+            // // TODO(dhil): The following is Luna's desugaring of
+            // // resume table into a BrTable. It introduces a new
+            // // synthetic block, which has the effect of "shifting" the
+            // // label indices ("shifting" in the sense of de
+            // // Bruijn). We ought to scrutinise the return of
+            // // `translate_resume` to decide whether to jump to one of
+            // // the resume table labels.
+            // let mut targets = vec![];
+            // for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
+            //     let tag = tag as usize;
+            //     if targets.len() <= tag {
+            //         targets.resize(tag + 1, 0) // it's okay to put zeroes because typechecker ensured this makes sense
+            //     }
+            //     targets[tag] = label + 1; // We add 1 because of our silly extra block desugar below
+            // }
+
+            // // We wrap a br_table in a block so we can assign "just keep going"
+            // // to the default value (9999 from libcall = br 0)
+            // translate_operator(
+            //     validator,
+            //     &Operator::Block {
+            //         // We want to keep a continuation on the stack for the
+            //         // suspend cases. Even though in this case (return) we
+            //         // simply drop / deallocate the continuation, we still need to
+            //         // keep it around for the clif typechecking
+            //         // TODO: i'm choosing some arbitrary type index here to
+            //         // represent "a type index" because i believe clif doesn't
+            //         // have any coarser type-checking and we simply drop the value
+            //         blockty: wasmparser::BlockType::Type(wasmparser::ValType::Ref(
+            //             wasmparser::RefType::indexed_func(false, *type_index).unwrap(),
+            //         )),
+            //         //blockty: wasmparser::BlockType::Empty,
+            //     },
+            //     builder,
+            //     state,
+            //     environ,
+            // )?;
+            // translate_resume_table(builder, state, targets)?;
+            // translate_operator(validator, &Operator::End, builder, state, environ)?;
             // We kept a continuation on the stack for the suspend cases, but
             // on return we have no continuation. so drop that continuation that
             // is now completely invalidated (something about deallocate?)
-            translate_operator(validator, &Operator::Drop, builder, state, environ)?;
+            //translate_operator(validator, &Operator::Drop, builder, state, environ)?;
         }
         Operator::Suspend { tag_index } => {
             environ.translate_suspend(builder.cursor(), state, *tag_index);
@@ -2481,9 +2572,18 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 fn translate_resume_table(
     builder: &mut FunctionBuilder,
     state: &mut FuncTranslationState,
-    targets: Vec<u32>,
+    resumetable: &wasmparser::ResumeTable<'_>,
 ) -> WasmResult<()> {
-    let default = 0;
+    let mut targets = vec![];
+    for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
+        let tag = tag as usize;
+        if targets.len() <= tag {
+            targets.resize(tag + 1, 0) // it's okay to put zeroes because typechecker ensured this makes sense
+        }
+        targets[tag] = label; // We add 1 because of our silly extra block desugar below
+    }
+
+    let default = 0; // HACK
     let mut min_depth = default;
     for depth in targets.clone() {
         if depth < min_depth {

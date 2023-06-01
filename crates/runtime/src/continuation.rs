@@ -161,9 +161,16 @@ pub fn resume(instance: &mut Instance, cont: *mut u8) -> Result<u32, TrapReason>
         Ok(_) => {
             let drop_box: Box<Fiber<_, _, _>> = unsafe { Box::from_raw(cont) };
             drop(drop_box); // I think this would be covered by the close brace below anyway
-            Ok(9999)
+            Ok(0) // zero value = return normally.
+            //Ok(9999)
         }
-        Err(y) => Ok(y),
+        Err(tag) => {
+            // We set the high bit to signal a return via suspend. We
+            // encode the tag into the remainder of the integer.
+            let signal_mask = 0b1000_0000_0000_0000_0000_0000_0000_0000;
+            debug_assert_eq!(tag & signal_mask, 0);
+            Ok(tag | signal_mask)
+        }, // 0 = suspend //Ok(y),
     }
 }
 
