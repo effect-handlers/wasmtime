@@ -2445,7 +2445,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
             let returns = environ.continuation_returns(*type_index);
             let return_block = block_with_params_wasmtype(builder, returns, environ)?;
-            let suspend_block = builder.create_block();
+            let suspend_block = crate::translation_utils::suspend_block(builder, environ)?;
             let mut returns_vals = vec![];
             if returns.len() == 0 {
                 // OK
@@ -2454,7 +2454,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             } else {
                 panic!("Unsupported continuation arity!");
             }
-            canonicalise_brif(builder, is_zero, return_block, &returns_vals, suspend_block, &[]);
+            canonicalise_brif(builder, is_zero, return_block, &returns_vals, suspend_block, &[tag, payload_addr]);
 
             // Next, build the resume table.
             builder.switch_to_block(suspend_block);
