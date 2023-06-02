@@ -566,7 +566,11 @@ pub trait FuncEnvironment: TargetEnvironment {
     /// TODO(dhil): write documentation.
     fn translate_cont_new(&mut self, pos: FuncCursor, state: &FuncTranslationState, func: ir::Value) -> WasmResult<ir::Value>;
 
-    /// TODO(dhil): write documentation.
+    /// Translates a resume instruction and returns a triple (vmctx,
+    /// signal, tag), where vmctx is the base address of the VM
+    /// context, signal is high bit of the resume result, and tag is
+    /// the index of the control tag supplied to suspend (if the
+    /// signal is 1).
     fn translate_resume(
         &mut self,
         builder: &mut FunctionBuilder,
