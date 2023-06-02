@@ -7,7 +7,7 @@ use cranelift_frontend::FunctionBuilder;
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 use wasmparser::{FuncValidator, WasmFuncType,  WasmModuleResources};
-use wasmtime_types::{WasmType};
+use wasmtime_types::WasmType;
 
 /// Get the parameter and result types for the given Wasm blocktype.
 pub fn blocktype_params_results<'a, T>(
@@ -137,9 +137,6 @@ pub fn suspend_block<PE: TargetEnvironment + ?Sized>(
     _environ: &PE,
 ) -> WasmResult<ir::Block> {
     let block = builder.create_block();
-    // Tag type
-    builder.append_block_param(block, ir::types::I32);
-
     Ok(block)
 }
 
