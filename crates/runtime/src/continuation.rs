@@ -1,9 +1,8 @@
 //! Continuations TODO
 
 use crate::instance::TopOfStackPointer;
-use crate::vmcontext::{VMContext, VMFuncRef, VMFunctionBody, VMOpaqueContext, VMWasmCallFunction};
+use crate::vmcontext::{VMContext, VMFuncRef, VMOpaqueContext, VMWasmCallFunction};
 use crate::{Instance, TrapReason};
-use std::mem;
 use std::ptr::NonNull;
 use wasmtime_fiber::{Fiber, FiberStack, Suspend};
 

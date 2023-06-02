@@ -2225,62 +2225,45 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     ) -> WasmResult<(ir::Value, ir::Value, ir::Value)> {
         // Strategy:
         //
-        // First, pop the continuation object from
-        // `resume_args`. It has the following shape:
+        // First, load the builtin `resume`. As a side effect obtain a
+        // handle to the base of the VM context.
+        //
+        // Second, pop the continuation object from `resume_args`. It
+        // has the following shape:
         //
         // [arg1 ... argN cont]
         //
-        // Second, store the remainder of `resume_args` in the
+        // Third, store the remainder of `resume_args` in the
         // designated typed continuation store in the VM context.
         //
-        // Third, load the builtin `resume` and call it.
+        // Four, pack up the arguments and call `resume`.
         //
-        // Four, return the result of the resume call.
+        // Five, return the result of the resume call.
 
-        // First step: unpack the continuation object.
-        let (cont, call_args) = resume_args.split_last().unwrap();
-
-        // Second step: store `call_args` in the typed continuations store.
-        let pointer_type = self.pointer_type();
-        let vmctx = self.vmctx(&mut builder.func);
-        let base = builder.ins().global_value(pointer_type, vmctx);
-
-        if call_args.len() == 0 { // OK
-        } else if call_args.len() == 1 {
-            let mem_flags = ir::MemFlags::trusted().with_vmctx();
-            let typed_cont_payloads_offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
-            builder.ins().store(mem_flags, call_args[0], base, typed_cont_payloads_offset);
-        } else {
-            panic!("Unsupported continuation arity")
-        }
-
-        // // We use an indirect call so that we don't have to patch the code at runtime.
-        // let pointer_type = self.pointer_type();
-        // let vmctx = self.vmctx(&mut pos.func);
-        // let base = pos.ins().global_value(pointer_type, vmctx);
-
-        // let mem_flags = ir::MemFlags::trusted().with_readonly();
-
-        // // Load the base of the array of builtin functions
-        // let array_offset = i32::try_from(self.offsets.vmctx_builtin_functions()).unwrap();
-        // let array_addr = pos.ins().load(pointer_type, mem_flags, base, array_offset);
-
-        // // Load the callee address.
-        // let body_offset = i32::try_from(callee_func_idx.index() * pointer_type.bytes()).unwrap();
-        // let func_addr = pos
-        //     .ins()
-        //     .load(pointer_type, mem_flags, array_addr, body_offset);
-
-        // (base, func_addr)
-
-        // Third step: load the builtin `resume` and call it.
+        // First step: load the builtin `resume` and as a side-effect
+        // return the address of the vmctx.
         let builtin_index = BuiltinFunctionIndex::resume();
         let builtin_sig = self.builtin_function_signatures.resume(&mut builder.func);
 
         let (vmctx, builtin_addr) =
             self.translate_load_builtin_function_address(&mut builder.cursor(), builtin_index);
 
-        // Now we step up the arguments to the builtin resume function.
+        // Second step: unpack the continuation object.
+        let (cont, call_args) = resume_args.split_last().unwrap();
+
+        // Third step: store `call_args` in the typed continuations
+        // store.
+        if call_args.len() == 0 { // OK
+        } else if call_args.len() == 1 {
+            let mem_flags = ir::MemFlags::trusted().with_vmctx();
+            let typed_cont_payloads_offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
+            builder.ins().store(mem_flags, call_args[0], vmctx, typed_cont_payloads_offset);
+        } else {
+            panic!("Unsupported continuation arity")
+        }
+
+        // Fourth step: setup the call arguments and apply the builtin
+        // resume function.
         let real_args = vec![vmctx, *cont];
 
         // Now we perform the call.
@@ -2288,17 +2271,23 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             .ins()
             .call_indirect(builtin_sig, builtin_addr, &real_args);
 
-        // Finally, we return the result of the call.
-        // 0 on suspend (TODO); 9999 on completion
+        // Fifth step: finally, we return the result of the call.
         let result = builder.func.dfg.first_result(call_inst);
 
-        // Bit twiddling
+        // The result encodes whether the return happens via ordinary
+        // means or via a suspend. If the high bit is set, then it is
+        // interpreted as the return happened via a suspend, and the
+        // remainder of the integer is to be interpreted as the index
+        // of the control tag that was supplied to the suspend.
         let signal_mask = 0xf000_0000;
         let inverse_signal_mask = 0x0fff_ffff;
         let signal = builder.ins().band_imm(result, signal_mask);
         let real_result = builder.ins().band_imm(result, inverse_signal_mask);
 
-        Ok((base, signal, real_result))
+        // We return a pointer to the base of the VM context, as the
+        // subsequent codegen needs to project from it. Along with it,
+        // we also return the return signal and the tag.
+        Ok((vmctx, signal, real_result))
     }
 
     fn translate_resume_throw(

@@ -139,10 +139,36 @@ pub fn suspend_block<PE: TargetEnvironment + ?Sized>(
     let block = builder.create_block();
     // Tag type
     builder.append_block_param(block, ir::types::I32);
-    // Cont type
+    // VM context pointer
+    builder.append_block_param(block, environ.pointer_type());
+
+    Ok(block)
+}
+
+/// Create a synthetic resume table entry block.
+pub fn resumetable_entry_block<PE: TargetEnvironment + ?Sized>(
+    builder: &mut FunctionBuilder,
+    environ: &PE,
+) -> WasmResult<ir::Block> {
+    let block = builder.create_block();
+    // VM context pointer
+    builder.append_block_param(block, environ.pointer_type());
+    // Continuation object pointer
     builder.append_block_param(block, environ.reference_type(WasmHeapType::Func));
-    // Payload pointer
-    // builder.append_block_param(block, environ.pointer_type());
+
+    Ok(block)
+}
+
+/// Create a synthetic resume table forwarding block.
+pub fn resumetable_forwarding_block<PE: TargetEnvironment + ?Sized>(
+    builder: &mut FunctionBuilder,
+    environ: &PE,
+) -> WasmResult<ir::Block> {
+    let block = builder.create_block();
+    // VM context pointer
+    builder.append_block_param(block, environ.pointer_type());
+    // Continuation object pointer
+    builder.append_block_param(block, environ.reference_type(WasmHeapType::Func));
 
     Ok(block)
 }
@@ -154,7 +180,7 @@ pub fn return_block<PE: TargetEnvironment + ?Sized>(
     environ: &PE,
 ) -> WasmResult<ir::Block> {
     let block = builder.create_block();
-    // Pointer to return payload.
+    // VM context pointer
     builder.append_block_param(block, environ.pointer_type());
 
     Ok(block)
