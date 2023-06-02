@@ -2453,7 +2453,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // jump to the suspend block.
             canonicalise_brif(builder, is_zero, return_block, &[base_addr], suspend_block, &[tag, base_addr]);
 
-            // Next, build the resume block.
+            // Next, build the suspend block.
             {
                 builder.switch_to_block(suspend_block);
                 builder.seal_block(suspend_block);
