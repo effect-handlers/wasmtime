@@ -164,7 +164,6 @@ pub fn resume(instance: &mut Instance, cont: *mut u8) -> Result<u32, TrapReason>
             // Store the result.
             let payloads_addr = unsafe { instance.get_typed_continuations_payloads_mut() };
             unsafe {
-                println!("result: {:?}", result);
                 std::ptr::write(payloads_addr, result);
             }
 

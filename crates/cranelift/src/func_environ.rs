@@ -2222,7 +2222,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
         resume_args: &[ir::Value],
-    ) -> WasmResult<(ir::Value, ir::Value, ir::Value, ir::Value)> {
+    ) -> WasmResult<(ir::Value, ir::Value, ir::Value)> {
         // Strategy:
         //
         // First, pop the continuation object from
@@ -2245,20 +2245,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let vmctx = self.vmctx(&mut builder.func);
         let base = builder.ins().global_value(pointer_type, vmctx);
 
-        let mem_flags = ir::MemFlags::trusted().with_vmctx();
-
-        let typed_cont_store_offset = i32::try_from(self.offsets.vmctx_typed_continuations_store()).unwrap();
-        let typed_cont_store_addr = builder.ins().load(pointer_type, mem_flags, base, typed_cont_store_offset);
-        let cont_addr = typed_cont_store_addr;
-
-        let typed_cont_payloads_offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
-        let payloads_addr = builder.ins().load(pointer_type, mem_flags, base, typed_cont_payloads_offset);
-        println!("cont_addr: {:?}, payloads_addr: {:?}", cont_addr, payloads_addr);
-
-
         if call_args.len() == 0 { // OK
         } else if call_args.len() == 1 {
-            builder.ins().store(mem_flags, call_args[0], typed_cont_store_addr, 0);
+            let mem_flags = ir::MemFlags::trusted().with_vmctx();
+            let typed_cont_payloads_offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
+            builder.ins().store(mem_flags, call_args[0], base, typed_cont_payloads_offset);
         } else {
             panic!("Unsupported continuation arity")
         }
@@ -2307,7 +2298,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let signal = builder.ins().band_imm(result, signal_mask);
         let real_result = builder.ins().band_imm(result, inverse_signal_mask);
 
-        Ok((cont_addr, payloads_addr, signal, real_result))
+        Ok((base, signal, real_result))
     }
 
     fn translate_resume_throw(
@@ -2346,16 +2337,25 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         self.types[idx].returns()
     }
 
-    fn unbox_values(&self, builder: &mut FunctionBuilder, valtypes: &[WasmType], base_addr: ir::Value) -> Vec<ir::Value> {
+    fn typed_continuations_load_payloads(&self, builder: &mut FunctionBuilder, valtypes: &[WasmType], base_addr: ir::Value) -> Vec<ir::Value> {
+        let memflags = ir::MemFlags::trusted().with_readonly();
         let mut values = vec![];
         if valtypes.len() == 0 {
             // OK
         } else if valtypes.len() == 1 {
-            values.push(type_directed_load(builder, convert_type(valtypes[0]), self.vmctx(&mut builder.func), i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap().into()))
+            let offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
+            let val = builder.ins().load(convert_type(valtypes[0]), memflags, base_addr, offset);
+            values.push(val)
         } else {
             panic!("Unsupported continuation arity!");
         }
         values
+    }
+
+    fn typed_continuations_load_continuation_object(&self, builder: &mut FunctionBuilder, base_addr: ir::Value) -> ir::Value {
+        let memflags = ir::MemFlags::trusted().with_readonly();
+        let offset = i32::try_from(self.offsets.vmctx_typed_continuations_store()).unwrap();
+        builder.ins().load(self.pointer_type(), memflags, base_addr, offset)
     }
 
     fn use_x86_blendv_for_relaxed_laneselect(&self, ty: Type) -> bool {
@@ -2367,21 +2367,6 @@ fn convert_type(ty: WasmType) -> ir::Type {
     match ty {
         WasmType::I32 => ir::types::I32,
         WasmType::I64 => ir::types::I64,
-        _ => todo!(),
-    }
-}
-
-fn type_directed_load(builder: &mut FunctionBuilder, ty: ir::Type, base: ir::Value, offset: Offset32) -> ir::Value {
-    let memflags = ir::MemFlags::trusted().with_readonly();
-    match ty {
-        ir::types::I32 => {
-            println!("base: {:?}", base);
-            builder.ins().load(I32, memflags, base, offset)
-        }
-        ir::types::I64 => {
-            println!("base: {:?}", base);
-            builder.ins().load(I64, memflags, base, offset)
-        }
         _ => todo!(),
     }
 }

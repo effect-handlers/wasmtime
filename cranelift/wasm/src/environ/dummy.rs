@@ -682,7 +682,7 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         _builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
         _resume_args: &[ir::Value],
-    ) -> WasmResult<(ir::Value, ir::Value, ir::Value, ir::Value)> {
+    ) -> WasmResult<(ir::Value, ir::Value, ir::Value)> {
         todo!()
     }
 
@@ -708,7 +708,11 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!()
     }
 
-    fn unbox_values(&self, _builder: &mut FunctionBuilder, _valtypes: &[WasmType], _base_addr: ir::Value) -> Vec<ir::Value> {
+    fn typed_continuations_load_payloads(&self, _builder: &mut FunctionBuilder, _valtypes: &[WasmType], _base_addr: ir::Value) -> Vec<ir::Value> {
+        todo!()
+    }
+
+    fn typed_continuations_load_continuation_object(&self, _builder: &mut FunctionBuilder, _base_addr: ir::Value) -> ir::Value {
         todo!()
     }
 }

@@ -572,7 +572,7 @@ pub trait FuncEnvironment: TargetEnvironment {
         builder: &mut FunctionBuilder,
         state: &FuncTranslationState,
         resume_args: &[ir::Value],
-    ) -> WasmResult<(ir::Value, ir::Value, ir::Value, ir::Value)>;
+    ) -> WasmResult<(ir::Value, ir::Value, ir::Value)>;
 
     /// TODO(dhil): write documentation.
     fn translate_resume_throw(
@@ -593,7 +593,10 @@ pub trait FuncEnvironment: TargetEnvironment {
     fn continuation_returns(&self, type_index: u32) -> &[wasmtime_types::WasmType];
 
     /// TODO
-    fn unbox_values(&self, builder: &mut FunctionBuilder, valtypes: &[wasmtime_types::WasmType], base_addr: ir::Value) -> std::vec::Vec<ir::Value>;
+    fn typed_continuations_load_payloads(&self, builder: &mut FunctionBuilder, valtypes: &[wasmtime_types::WasmType], base_addr: ir::Value) -> std::vec::Vec<ir::Value>;
+
+    /// TODO
+    fn typed_continuations_load_continuation_object(&self, builder: &mut FunctionBuilder, base_addr: ir::Value) -> ir::Value;
 
     /// Returns whether the CLIF `x86_blendv` instruction should be used for the
     /// relaxed simd `*.relaxed_laneselect` instruction for the specified type.
