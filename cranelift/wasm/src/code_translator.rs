@@ -2484,15 +2484,15 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 switch.set_entry(tag as u128, case);
                 builder.switch_to_block(case);
 
-                // Push the continuation object
-                state.push1(cont);
 
                 // Load and push arguments
-                // TODO(frank-emrich): Is cont-then-args the right order? Or the other way around?
                 let param_types = environ.tag_params(tag);
                 let params =
                     environ.typed_continuations_load_payloads(builder, param_types, base_addr);
                 state.pushn(&params);
+                // Push the continuation object
+                // TODO(frank-emrich): Is args-then-cont the right order? Or the other way around?
+                state.push1(cont);
                 let count = params.len() + 1;
                 let (br_destination, inputs) = translate_br_if_args(label, state);
                 builder.ins().jump(br_destination, inputs);
