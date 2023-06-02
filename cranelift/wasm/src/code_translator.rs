@@ -2428,7 +2428,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let resume_args = state.peekn(arity + 1);
 
             // Now, we generate the call instruction.
-            let (cont_addr, payloads_addr, signal, tag) = environ.translate_resume(builder, state, &resume_args)?;
+            let (base_addr, signal, tag) = environ.translate_resume(builder, state, &resume_args)?;
             // The `payload_addr` is the address of payload object
             // that will have been created by a return or suspend. The
             // `result` is an integer indicating whether the `resume`
@@ -2443,18 +2443,24 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // 3) `resume` is forwarding (TODO)
 
             let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
-            let returns = environ.continuation_returns(*type_index);
             let return_block = crate::translation_utils::return_block(builder, environ)?;
             let suspend_block = crate::translation_utils::suspend_block(builder, environ)?;
-            canonicalise_brif(builder, is_zero, return_block, &[payloads_addr], suspend_block, &[tag, cont_addr]);
+            canonicalise_brif(builder, is_zero, return_block, &[base_addr], suspend_block, &[tag, base_addr]);
 
             // Next, build the resume table.
             builder.switch_to_block(suspend_block);
             builder.seal_block(suspend_block);
-            // Push the payloads
+            // Get a handle on the block's parameters (we know there
+            // are only two, because we just passed them in above!).
+            let (tag, cont) = {
+                let params = builder.block_params(suspend_block);
+                (params[0], params[1])
+            };
+            // Load and push the continuation object
+            let cont = environ.typed_continuations_load_continuation_object(builder, base_addr);
+            state.push1(cont);
+            // Load and push payloads
             //state.push1(todo!());
-            // Push the continuation object
-            state.push1(cont_addr);
             // Push the suspend tag.
             state.push1(tag);
 
@@ -2465,9 +2471,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             builder.switch_to_block(return_block);
             builder.seal_block(return_block);
 
-            // Push the results
-            let values = environ.unbox_values(builder, returns, payloads_addr);
-            println!("values: {:?}", values);
+            // Load and push the results
+            let returns = environ.continuation_returns(*type_index);
+            let base_addr = builder.block_params(return_block)[0];
+            let values = environ.typed_continuations_load_payloads(builder, returns, base_addr);
+            //println!("values: {:?}", values);
             state.pushn(&values);
 
             // let next_block = builder.create_block();
