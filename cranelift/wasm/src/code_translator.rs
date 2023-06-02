@@ -2449,68 +2449,63 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
             let return_block = crate::translation_utils::return_block(builder, environ)?;
             let suspend_block = crate::translation_utils::suspend_block(builder, environ)?;
+            let switch_block = builder.create_block();
             // Jump to the return block if the signal is 0, otherwise
             // jump to the suspend block.
-            canonicalise_brif(builder, is_zero, return_block, &[], suspend_block, &[tag]);
+            canonicalise_brif(builder, is_zero, return_block, &[], suspend_block, &[]);
 
             // Next, build the suspend block.
-            {
+            let cont = {
                 builder.switch_to_block(suspend_block);
                 builder.seal_block(suspend_block);
-                // Get a handle on the block's parameters (we know there
-                // are only two, because we just passed them in above!).
-                let params = builder.block_params(suspend_block);
-                let tag = params[0];
-                // Load and push the continuation object
+
+                // Load the continuation object
                 let cont = environ.typed_continuations_load_continuation_object(builder, base_addr);
-                // state.push1(cont);
-                // Load and push payloads
-                //state.push1(todo!());
-                // Push the suspend tag.
-                // state.push1(tag);
 
-                // Now, translate the resume table.
-                //translate_resume_table(builder, state, resumetable)?;
+                // We need to terminate this block before being allowed to switch to another one
+                builder.ins().jump(switch_block, &[]);
+                cont
+            };
 
-                // Strategy:
-                //
-                // Translate each each (tag, label) pair in the resume table to a
-                // switch-case of the form "case tag: br label".
-                //
-                // The fallback/default case performs effect forwarding (TODO).
-                //builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
+            // Strategy:
+            //
+            // Translate each each (tag, label) pair in the resume table to a
+            // switch-case of the form "case tag: br label".
+            //
+            // The fallback/default case performs effect forwarding (TODO).
+            // builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
+            //
+            // First, Initialise the switch structure.
+            let mut switch = Switch::new();
+            // Second, we consume the resume table entry-wise.
+            for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
+                let case = crate::translation_utils::resumetable_entry_block(builder, environ)?;
+                switch.set_entry(tag as u128, case);
+                builder.switch_to_block(case);
+                builder.seal_block(case);
 
-                // First, we pop the scrutinee (tag) off the stack.
-                // let tag = state.pop1();
+                // Push the continuation object
+                state.push1(cont);
 
-                // let cont = state.pop1();
+                // Load and push arguments
+                // TODO(frank-emrich): Is cont-then-args the right order? Or the other way around?
+                let param_types = environ.tag_params(tag);
+                let params =
+                    environ.typed_continuations_load_payloads(builder, param_types, base_addr);
+                state.pushn(&params);
+                let count = params.len() + 1;
+                let (br_destination, inputs) = translate_br_if_args(label, state);
+                builder.ins().jump(br_destination, inputs);
+                state.popn(count);
+            }
 
-                // Initialise the switch structure.
-                let mut switch = Switch::new();
+            let forwarding_case = crate::translation_utils::resumetable_forwarding_block(builder, environ)?;
 
-                // Second, we consume the resume table entry-wise.
-                for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
-                    let case = crate::translation_utils::resumetable_entry_block(builder, environ)?;
-                    switch.set_entry(tag as u128, case);
-                    builder.switch_to_block(case);
-                    builder.seal_block(case);
-
-                    // Push the continuation object
-                    state.push1(cont);
-
-                    // Load and push arguments
-                    // TODO(frank-emrich): Is cont-then-args the right order? Or the other way around?
-                    let param_types = environ.tag_params(tag);
-                    let params =
-                        environ.typed_continuations_load_payloads(builder, param_types, base_addr);
-                    state.pushn(&params);
-
-                    let (br_destination, inputs) = translate_br_if_args(label, state);
-                    builder.ins().jump(br_destination, inputs);
-                }
-
-                let forwarding_case = crate::translation_utils::resumetable_forwarding_block(builder, environ)?;
+            // Switch block
+            {
+                builder.switch_to_block(switch_block);
                 switch.emit(builder, tag, forwarding_case);
+                builder.seal_block(switch_block);
                 builder.switch_to_block(forwarding_case);
                 builder.seal_block(forwarding_case);
                 builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
