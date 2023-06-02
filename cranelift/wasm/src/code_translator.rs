@@ -2510,8 +2510,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
                     // Push the continuation object
                     state.push1(cont);
+
                     // Load and push arguments
-                    //state.pushn(todo!())
+                    // TODO(frank-emrich): Is cont-then-args the right order? Or the other way around?
+                    let param_types = environ.tag_params(tag);
+                    let params =
+                        environ.typed_continuations_load_payloads(builder, param_types, base_addr);
+                    state.pushn(&params);
 
                     let (br_destination, inputs) = translate_br_if_args(label, state);
                     builder.ins().jump(br_destination, inputs);
