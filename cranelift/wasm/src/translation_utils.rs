@@ -7,7 +7,7 @@ use cranelift_frontend::FunctionBuilder;
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
 use wasmparser::{FuncValidator, WasmFuncType,  WasmModuleResources};
-use wasmtime_types::{WasmType, WasmHeapType};
+use wasmtime_types::{WasmType};
 
 /// Get the parameter and result types for the given Wasm blocktype.
 pub fn blocktype_params_results<'a, T>(
