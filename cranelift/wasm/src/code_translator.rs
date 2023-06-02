@@ -2451,7 +2451,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let suspend_block = crate::translation_utils::suspend_block(builder, environ)?;
             // Jump to the return block if the signal is 0, otherwise
             // jump to the suspend block.
-            canonicalise_brif(builder, is_zero, return_block, &[base_addr], suspend_block, &[tag, base_addr]);
+            canonicalise_brif(builder, is_zero, return_block, &[], suspend_block, &[tag]);
 
             // Next, build the suspend block.
             {
@@ -2459,10 +2459,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 builder.seal_block(suspend_block);
                 // Get a handle on the block's parameters (we know there
                 // are only two, because we just passed them in above!).
-                let (tag, base_addr) = {
-                    let params = builder.block_params(suspend_block);
-                    (params[0], params[1])
-                };
+                let params = builder.block_params(suspend_block);
+                let tag = params[0];
                 // Load and push the continuation object
                 let cont = environ.typed_continuations_load_continuation_object(builder, base_addr);
                 // state.push1(cont);
@@ -2497,17 +2495,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                     builder.switch_to_block(case);
                     builder.seal_block(case);
 
-                    // Obtain a handle to this block's inputs
-                    let (_base_addr, cont) = {
-                        let params = builder.block_params(case); // NOTE(dhil): see `resumetable_entry_block`.
-                        (params[0], params[1])
-                    };
-
-                    // TODO(dhil): This approach doesn't quite work,
-                    // because cranelift's switch does not take branch
-                    // arguments. So we need to do something similar
-                    // to BrTable jump arguments branch.
-
                     // Push the continuation object
                     state.push1(cont);
 
@@ -2538,7 +2525,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 let returns = environ.continuation_returns(*type_index);
                 // NOTE(dhil): the following index is safe as we passed
                 // exactly one argument to the return block above!
-                let base_addr = builder.block_params(return_block)[0];
                 let values = environ.typed_continuations_load_payloads(builder, returns, base_addr);
                 state.pushn(&values);
             }
