@@ -10,7 +10,7 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_frontend::Variable;
 use cranelift_wasm::{
     self, FuncIndex, FuncTranslationState, GlobalIndex, GlobalVariable, Heap, HeapData, HeapStyle,
-    MemoryIndex, TableIndex, TargetEnvironment, TypeIndex, WasmHeapType, WasmRefType, WasmResult,
+    MemoryIndex, TableIndex, TagIndex, TargetEnvironment, TypeIndex, WasmHeapType, WasmRefType, WasmResult,
     WasmType,
 };
 use std::convert::TryFrom;
@@ -2323,6 +2323,16 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
     fn continuation_returns(&self, index: u32) -> &[WasmType] {
         let idx = self.module.types[TypeIndex::from_u32(index)].unwrap_continuation();
+        self.types[idx].returns()
+    }
+
+    fn tag_params(&self, tag_index: u32) -> &[WasmType] {
+        let idx = self.module.tags[TagIndex::from_u32(tag_index)].signature;
+        self.types[idx].params()
+    }
+
+    fn tag_returns(&self, tag_index: u32) -> &[WasmType] {
+        let idx = self.module.tags[TagIndex::from_u32(tag_index)].signature;
         self.types[idx].returns()
     }
 

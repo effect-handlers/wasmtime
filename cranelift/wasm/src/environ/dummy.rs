@@ -708,6 +708,14 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!()
     }
 
+    fn tag_params(&self, _tag_index: u32) -> &[WasmType] {
+        todo!()
+    }
+
+    fn tag_returns(&self, _tag_index: u32) -> &[WasmType] {
+        todo!()
+    }
+
     fn typed_continuations_load_payloads(&self, _builder: &mut FunctionBuilder, _valtypes: &[WasmType], _base_addr: ir::Value) -> Vec<ir::Value> {
         todo!()
     }

@@ -600,6 +600,12 @@ pub trait FuncEnvironment: TargetEnvironment {
     fn typed_continuations_load_payloads(&self, builder: &mut FunctionBuilder, valtypes: &[wasmtime_types::WasmType], base_addr: ir::Value) -> std::vec::Vec<ir::Value>;
 
     /// TODO
+    fn tag_params(&self, tag_index: u32) -> &[wasmtime_types::WasmType];
+
+    /// TODO
+    fn tag_returns(&self, tag_index: u32) -> &[wasmtime_types::WasmType];
+
+    /// TODO
     fn typed_continuations_load_continuation_object(&self, builder: &mut FunctionBuilder, base_addr: ir::Value) -> ir::Value;
 
     /// Returns whether the CLIF `x86_blendv` instruction should be used for the
