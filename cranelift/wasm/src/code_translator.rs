@@ -2478,11 +2478,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // First, Initialise the switch structure.
             let mut switch = Switch::new();
             // Second, we consume the resume table entry-wise.
+            let mut case_blocks  = vec![];
             for (tag, label) in resumetable.targets().map(|x| x.unwrap()) {
                 let case = crate::translation_utils::resumetable_entry_block(builder, environ)?;
                 switch.set_entry(tag as u128, case);
                 builder.switch_to_block(case);
-                builder.seal_block(case);
 
                 // Push the continuation object
                 state.push1(cont);
@@ -2497,6 +2497,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 let (br_destination, inputs) = translate_br_if_args(label, state);
                 builder.ins().jump(br_destination, inputs);
                 state.popn(count);
+                case_blocks.push(case);
             }
 
             let forwarding_case = crate::translation_utils::resumetable_forwarding_block(builder, environ)?;
@@ -2509,6 +2510,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 builder.switch_to_block(forwarding_case);
                 builder.seal_block(forwarding_case);
                 builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
+
+                // We can only seal them now, after switch.emit ran
+                for case_block in case_blocks {
+                    builder.seal_block(case_block);
+                }
             }
 
             // Now, finish the return block
