@@ -2460,6 +2460,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 builder.seal_block(suspend_block);
 
                 // Load the continuation object
+                // TODO(frank-emrich) Is it actually the case that the suspended continuation MUST
+                // be the one we resumed here? In that case we wouldn't actually have to go via memory
+                // but could just re-use the cont object on the (WASM) stack in the beginning
                 let cont = environ.typed_continuations_load_continuation_object(builder, base_addr);
 
                 // We need to terminate this block before being allowed to switch to another one
