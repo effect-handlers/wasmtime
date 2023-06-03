@@ -600,6 +600,9 @@ pub trait FuncEnvironment: TargetEnvironment {
     fn typed_continuations_load_payloads(&self, builder: &mut FunctionBuilder, valtypes: &[wasmtime_types::WasmType], base_addr: ir::Value) -> std::vec::Vec<ir::Value>;
 
     /// TODO
+    fn typed_continuations_store_payloads(&self, builder: &mut FunctionBuilder, valtypes: &[wasmtime_types::WasmType], values : &[ir::Value], base_addr: ir::Value);
+
+    /// TODO
     fn tag_params(&self, tag_index: u32) -> &[wasmtime_types::WasmType];
 
     /// TODO

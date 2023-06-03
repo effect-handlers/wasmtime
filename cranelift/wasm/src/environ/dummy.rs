@@ -720,6 +720,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!()
     }
 
+    fn typed_continuations_store_payloads(&self, _builder: &mut FunctionBuilder, _valtypes: &[WasmType], _values : &[ir::Value], _base_addr: ir::Value) {
+        todo!()
+    }
+
     fn typed_continuations_load_continuation_object(&self, _builder: &mut FunctionBuilder, _base_addr: ir::Value) -> ir::Value {
         todo!()
     }

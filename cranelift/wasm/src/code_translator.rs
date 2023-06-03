@@ -2605,7 +2605,21 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             //translate_operator(validator, &Operator::Drop, builder, state, environ)?;
         }
         Operator::Suspend { tag_index } => {
+            let param_types = environ.tag_params(*tag_index);
+
+            let params = state.peekn(param_types.len());
+            let param_count = params.len();
+            let pointer_type = environ.pointer_type();
+            let vmctx = builder.func.create_global_value(ir::GlobalValueData::VMContext);
+            let base_addr = builder.cursor().ins().global_value(pointer_type, vmctx);
+            environ.typed_continuations_store_payloads(builder, param_types, params, base_addr);
+            state.popn(param_count);
+
             environ.translate_suspend(builder.cursor(), state, *tag_index);
+
+            let return_types = environ.tag_returns(*tag_index);
+            let return_values = environ.typed_continuations_load_payloads(builder, return_types, base_addr);
+            state.pushn(&return_values);
         }
         Operator::ContBind {
             src_index: _,

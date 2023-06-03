@@ -2351,6 +2351,21 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         values
     }
 
+    fn typed_continuations_store_payloads(&self, builder: &mut FunctionBuilder, valtypes: &[WasmType], values : &[ir::Value], base_addr: ir::Value) {
+        //TODO(frank-emrich) what flags exactly do we need here?
+        let memflags = ir::MemFlags::trusted();
+
+        if valtypes.len() == 0 {
+            // OK
+        } else if valtypes.len() == 1 {
+            let offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
+             builder.ins().store(memflags,values[0],base_addr, offset);
+        } else {
+            panic!("Unsupported continuation arity!");
+        }
+
+    }
+
     fn typed_continuations_load_continuation_object(&self, builder: &mut FunctionBuilder, base_addr: ir::Value) -> ir::Value {
         let memflags = ir::MemFlags::trusted().with_readonly();
         let offset = i32::try_from(self.offsets.vmctx_typed_continuations_store()).unwrap();
