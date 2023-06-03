@@ -64,6 +64,11 @@ pub fn resume(instance: &mut Instance, cont: *mut u8) -> Result<u32, TrapReason>
             // encode the tag into the remainder of the integer.
             let signal_mask = 0xf000_0000;
             debug_assert_eq!(tag & signal_mask, 0);
+            unsafe {
+                let cont_store_ptr =
+                    instance.get_typed_continuations_store_mut() as *mut *mut Fiber<'static, (), u32, u32>;
+                cont_store_ptr.write(cont)
+            };
             Ok(tag | signal_mask)
         }, // 0 = suspend //Ok(y),
     }
