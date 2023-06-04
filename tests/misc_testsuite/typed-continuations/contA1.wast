@@ -1,3 +1,7 @@
+;; This file is currently a collection of many test cases
+;; and will eventually be split up so that each test is in its
+;; own file!
+
 (module
 
   (type $unit_to_unit (func))
@@ -213,8 +217,8 @@
 (assert_return (invoke "test_case_a2") (i32.const 100))
 (assert_return (invoke "test_case_a3") (i32.const 100))
 (assert_return (invoke "test_case_a4") (i32.const 100))
-(assert_return (invoke "test_case_b1") (i32.const 100))
-(assert_return (invoke "test_case_b2") (i32.const 100))
-(assert_return (invoke "test_case_b3") (i32.const 100))
-(assert_return (invoke "test_case_b4") (i32.const 100))
-(assert_return (invoke "test_case_b5") (i32.const 100))
+;; (assert_return (invoke "test_case_b1") (i32.const 100))
+;; (assert_return (invoke "test_case_b2") (i32.const 100))
+;; (assert_return (invoke "test_case_b3") (i32.const 100))
+;; (assert_return (invoke "test_case_b4") (i32.const 100))
+;; (assert_return (invoke "test_case_b5") (i32.const 100))

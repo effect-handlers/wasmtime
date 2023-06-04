@@ -1,0 +1,22 @@
+Group A: No payloads on tags, no param or return values on handled function, either
+  1: after suspend, do not invoke resumption
+  2. do invoke resumption
+
+Group B: No payloads on tags, handled function may take parameters and return values
+  1. handled function takes argument, has no return value, resumption is not invoked
+  2. handled function takes argument, has no return value, resumption is invoked
+  3. handled function takes argument and has return value, resumption is not invoked
+  4. handled function takes argument and has return value, resumption is invoked
+  5. handled function never suspends
+
+Group C: allow tags to have param values
+  1. resumption not invoked
+  2. resumption is invoked
+  3. handled function suspends twice with same tag
+  4. handled function suspends twice with different
+
+
+Group D: like C, but allow tags to also have return values
+  1. resumption not invoked
+  2. resumption invoked
+  3. different tags
