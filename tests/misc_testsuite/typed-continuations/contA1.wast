@@ -64,16 +64,12 @@
       (global.set  $tracer (i32.const -16))
       (unreachable))
     ;; after on_e1, stack: [resumption]
-    (local.set $finish_f1)
     (global.set  $tracer (i32.const -32))
-    (block $on_unused (result (ref $res_unit_to_unit))
-      (global.set  $tracer (i32.const -64))
-      (resume $res_unit_to_unit (tag $unused $on_unused) (local.get $finish_f1))
-      ;; the resume above resumes execution of f1, which finishes without further suspends
-      (global.set  $tracer (i32.const -128))
-      (return (i32.const 100)))
-    (global.set  $tracer (i32.const -256))
-    (unreachable))
+
+    (resume $res_unit_to_unit)
+    ;; the resume above resumes execution of f1, which finishes without further suspends
+    (global.set  $tracer (i32.const -128))
+    (return (i32.const 100)))
 
   (func $test_case_a3 (export "test_case_a3") (result i32)
     (global.set  $tracer (i32.const -4))
