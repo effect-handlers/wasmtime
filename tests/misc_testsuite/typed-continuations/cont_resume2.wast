@@ -1,5 +1,9 @@
 ;; Simple test with only parameter payloads and two tags
 
+;; TODO(frank-emrich)
+;; this test will be subsumed by the more structed test suit
+;; see (test_overview.txt to get an idea for what's coming)
+
 (module
   (type $g_type (func (result i32)))
   (type $ct (cont $g_type))
