@@ -25,6 +25,10 @@ pub fn cont_new(instance: &mut Instance, func: *mut u8) -> *mut u8 {
         Fiber::new(
             FiberStack::new(4096).unwrap(),
             move |_first_val: (), _suspend: &Suspend<(), u32, u32>| {
+                // TODO(frank-emrich): Need to load arguments (if present) from
+                // payload storage and pass to f.
+                // Consider getting the array_call version from func
+                // to achieve this instead.
                 unsafe { f(callee_ctx, caller_ctx, ()) }
             },
         ).unwrap()

@@ -2407,9 +2407,10 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             unimplemented!("GC operators not yet implemented")
         }
 
-        Operator::ContNew { type_index: _ } => {
+        Operator::ContNew { type_index  } => {
+            let arg_types = environ.continuation_arguments(*type_index).to_vec();
             let r = state.pop1();
-            state.push1(environ.translate_cont_new(builder.cursor(), state, r)?);
+            state.push1(environ.translate_cont_new(builder.cursor(), state, r, &arg_types)?);
         }
         Operator::Resume {
             type_index,

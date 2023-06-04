@@ -2205,6 +2205,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         _state: &FuncTranslationState,
         func: ir::Value,
+        _arg_types : &[WasmType]
     ) -> WasmResult<ir::Value> {
         let builtin_index = BuiltinFunctionIndex::cont_new();
         let builtin_sig = self.builtin_function_signatures.cont_new(&mut pos.func);
@@ -2319,6 +2320,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
     fn continuation_arity(&self, index: u32) -> usize {
         let idx = self.module.types[TypeIndex::from_u32(index)].unwrap_continuation();
         self.types[idx].params().len()
+    }
+
+    fn continuation_arguments(&self, index: u32) -> &[WasmType] {
+        let idx = self.module.types[TypeIndex::from_u32(index)].unwrap_continuation();
+        self.types[idx].params()
     }
 
     fn continuation_returns(&self, index: u32) -> &[WasmType] {

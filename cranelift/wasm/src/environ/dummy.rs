@@ -673,7 +673,7 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         Ok(pos.ins().iconst(I32, 0))
     }
 
-    fn translate_cont_new(&mut self, _pos: FuncCursor, _state: &FuncTranslationState, _func: ir::Value) -> WasmResult<ir::Value> {
+    fn translate_cont_new(&mut self, _pos: FuncCursor, _state: &FuncTranslationState, _func: ir::Value, _arg_types : &[wasmtime_types::WasmType]) -> WasmResult<ir::Value> {
         todo!()
     }
 
@@ -701,6 +701,10 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
     }
 
     fn continuation_arity(&self, _type_index: u32) -> usize {
+        todo!()
+    }
+
+    fn continuation_arguments(&self, _type_index: u32) -> &[wasmtime_types::WasmType] {
         todo!()
     }
 

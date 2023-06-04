@@ -564,7 +564,7 @@ pub trait FuncEnvironment: TargetEnvironment {
     }
 
     /// TODO(dhil): write documentation.
-    fn translate_cont_new(&mut self, pos: FuncCursor, state: &FuncTranslationState, func: ir::Value) -> WasmResult<ir::Value>;
+    fn translate_cont_new(&mut self, pos: FuncCursor, state: &FuncTranslationState, func: ir::Value, arg_types : &[wasmtime_types::WasmType]) -> WasmResult<ir::Value>;
 
     /// Translates a resume instruction and returns a triple (vmctx,
     /// signal, tag), where vmctx is the base address of the VM
@@ -592,6 +592,9 @@ pub trait FuncEnvironment: TargetEnvironment {
 
     /// TODO
     fn continuation_arity(&self, type_index: u32) -> usize;
+
+    /// TODO
+    fn continuation_arguments(&self, type_index: u32) -> &[wasmtime_types::WasmType];
 
     /// TODO
     fn continuation_returns(&self, type_index: u32) -> &[wasmtime_types::WasmType];
