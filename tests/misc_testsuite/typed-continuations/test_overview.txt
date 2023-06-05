@@ -1,3 +1,12 @@
+This file will eventually contain an overview of what the different tests in a newly
+created test suite do.
+Currently, all of this is contained within contA1.wast, but eventually each test
+will live in its own file.
+
+Draft content below.
+----
+
+
 Group A: No payloads on tags, no param or return values on handled function, either
   1: after suspend, do not invoke resumption
   2. do invoke resumption

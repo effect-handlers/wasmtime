@@ -1,6 +1,6 @@
 ;; This file is currently a collection of many test cases
 ;; and will eventually be split up so that each test is in its
-;; own file!
+;; own file! Also see test_overview.txt
 
 (module
 
