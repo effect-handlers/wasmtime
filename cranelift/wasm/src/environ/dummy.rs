@@ -700,10 +700,6 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!()
     }
 
-    fn continuation_arity(&self, _type_index: u32) -> usize {
-        todo!()
-    }
-
     fn continuation_arguments(&self, _type_index: u32) -> &[wasmtime_types::WasmType] {
         todo!()
     }

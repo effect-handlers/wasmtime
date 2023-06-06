@@ -591,9 +591,6 @@ pub trait FuncEnvironment: TargetEnvironment {
     fn translate_suspend(&mut self, pos: FuncCursor, state: &FuncTranslationState, tag_index: u32);
 
     /// TODO
-    fn continuation_arity(&self, type_index: u32) -> usize;
-
-    /// TODO
     fn continuation_arguments(&self, type_index: u32) -> &[wasmtime_types::WasmType];
 
     /// TODO

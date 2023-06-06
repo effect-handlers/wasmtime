@@ -2425,7 +2425,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // follows.
             //
             //  [ arg1 ... argN cont ]
-            let arity = environ.continuation_arity(*type_index);
+            let arity = environ.continuation_arguments(*type_index).len();
             let resume_args = state.peekn(arity + 1);
 
             // Now, we generate the call instruction.
