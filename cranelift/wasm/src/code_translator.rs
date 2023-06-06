@@ -2476,11 +2476,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             //
             // Translate each each (tag, label) pair in the resume table to a
             // switch-case of the form "case tag: br label".
+            // The switching logic then ensures that we jump to the block
+            // handling the corresponding tag.
             //
             // The fallback/default case performs effect forwarding (TODO).
-            // builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
             //
-            // First, Initialise the switch structure.
+            // First, initialise the switch structure.
             let mut switch = Switch::new();
             // Second, we consume the resume table entry-wise.
             let mut case_blocks  = vec![];
@@ -2494,20 +2495,25 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 let param_types = environ.tag_params(tag);
                 let params =
                     environ.typed_continuations_load_payloads(builder, param_types, base_addr);
+
                 state.pushn(&params);
                 // Push the continuation object
-                // TODO(frank-emrich): Is args-then-cont the right order? Or the other way around?
                 state.push1(cont);
                 let count = params.len() + 1;
                 let (br_destination, inputs) = translate_br_if_args(label, state);
+
+                // Now jump to the actual user-defined block handling this tag, as given by the resumetable
                 builder.ins().jump(br_destination, inputs);
                 state.popn(count);
                 case_blocks.push(case);
             }
 
+            // Note that at this point we haven't actually emitted any code for the switching logic itself,
+            // but only filled the Switch structure and created the blocks it jumps to.
+
             let forwarding_case = crate::translation_utils::resumetable_forwarding_block(builder, environ)?;
 
-            // Switch block
+            // Switch block (where the actual switching logic is emitted to)
             {
                 builder.switch_to_block(switch_block);
                 switch.emit(builder, tag, forwarding_case);
@@ -2516,7 +2522,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 builder.seal_block(forwarding_case);
                 builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
 
-                // We can only seal them now, after switch.emit ran
+                // We can only seal the blocks we generated for each tag now, after switch.emit ran
                 for case_block in case_blocks {
                     builder.seal_block(case_block);
                 }
