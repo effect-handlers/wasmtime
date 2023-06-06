@@ -2222,24 +2222,21 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
-        resume_args: &[ir::Value],
+        cont : ir::Value,
+        call_arg_types: &[WasmType],
+        call_args: &[ir::Value]
     ) -> WasmResult<(ir::Value, ir::Value, ir::Value)> {
         // Strategy:
         //
         // First, load the builtin `resume`. As a side effect obtain a
         // handle to the base of the VM context.
         //
-        // Second, pop the continuation object from `resume_args`. It
-        // has the following shape:
-        //
-        // [arg1 ... argN cont]
-        //
-        // Third, store the remainder of `resume_args` in the
+        // Second, store the remainder of `call_args` in the
         // designated typed continuation store in the VM context.
         //
-        // Four, pack up the arguments and call `resume`.
+        // Third, pack up the arguments and call `resume`.
         //
-        // Five, return the result of the resume call.
+        // Fourth, return the result of the resume call.
 
         // First step: load the builtin `resume` and as a side-effect
         // return the address of the vmctx.
@@ -2249,30 +2246,21 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let (vmctx, builtin_addr) =
             self.translate_load_builtin_function_address(&mut builder.cursor(), builtin_index);
 
-        // Second step: unpack the continuation object.
-        let (cont, call_args) = resume_args.split_last().unwrap();
 
-        // Third step: store `call_args` in the typed continuations
+        // Second step: store `call_args` in the typed continuations
         // store.
-        if call_args.len() == 0 { // OK
-        } else if call_args.len() == 1 {
-            let mem_flags = ir::MemFlags::trusted().with_vmctx();
-            let typed_cont_payloads_offset = i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
-            builder.ins().store(mem_flags, call_args[0], vmctx, typed_cont_payloads_offset);
-        } else {
-            panic!("Unsupported continuation arity")
-        }
+        self.typed_continuations_store_payloads(builder, call_arg_types, call_args, vmctx);
 
-        // Fourth step: setup the call arguments and apply the builtin
+        // Third step: setup the call arguments and apply the builtin
         // resume function.
-        let real_args = vec![vmctx, *cont];
+        let real_args = vec![vmctx, cont];
 
         // Now we perform the call.
         let call_inst = builder
             .ins()
             .call_indirect(builtin_sig, builtin_addr, &real_args);
 
-        // Fifth step: finally, we return the result of the call.
+        // Fourth step: finally, we return the result of the call.
         let result = builder.func.dfg.first_result(call_inst);
 
         // The result encodes whether the return happens via ordinary

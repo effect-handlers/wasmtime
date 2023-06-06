@@ -575,7 +575,9 @@ pub trait FuncEnvironment: TargetEnvironment {
         &mut self,
         builder: &mut FunctionBuilder,
         state: &FuncTranslationState,
-        resume_args: &[ir::Value],
+        cont : ir::Value,
+        call_arg_types: &[wasmtime_types::WasmType],
+        call_args: &[ir::Value]
     ) -> WasmResult<(ir::Value, ir::Value, ir::Value)>;
 
     /// TODO(dhil): write documentation.

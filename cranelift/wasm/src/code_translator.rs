@@ -2426,10 +2426,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             //
             //  [ arg1 ... argN cont ]
             let arity = environ.continuation_arguments(*type_index).len();
-            let resume_args = state.peekn(arity + 1);
+            let (cont, call_args) = state.peekn(arity + 1).split_last().unwrap();
+            let call_arg_types = environ.continuation_arguments(*type_index).to_vec();
 
             // Now, we generate the call instruction.
-            let (base_addr, signal, tag) = environ.translate_resume(builder, state, &resume_args)?;
+            let (base_addr, signal, tag) = environ.translate_resume(builder, state, *cont, &call_arg_types, call_args)?;
             // Description of results:
             // * The `base_addr` is the base address of VM context.
             // * The `signal` is an encoded boolean indicating whether

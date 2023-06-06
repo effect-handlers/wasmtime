@@ -681,7 +681,9 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         &mut self,
         _builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
-        _resume_args: &[ir::Value],
+        _cont : ir::Value,
+        _call_arg_types: &[WasmType],
+        _call_args: &[ir::Value]
     ) -> WasmResult<(ir::Value, ir::Value, ir::Value)> {
         todo!()
     }
