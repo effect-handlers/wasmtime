@@ -2520,6 +2520,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 builder.seal_block(switch_block);
                 builder.switch_to_block(forwarding_case);
                 builder.seal_block(forwarding_case);
+                // TODO: emit effect forwarding logic.
                 builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
 
                 // We can only seal the blocks we generated for each tag now, after switch.emit ran
@@ -2535,8 +2536,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
                 // Load and push the results
                 let returns = environ.continuation_returns(*type_index);
-                // NOTE(dhil): the following index is safe as we passed
-                // exactly one argument to the return block above!
                 let values = environ.typed_continuations_load_payloads(builder, returns, base_addr);
                 state.pushn(&values);
             }
