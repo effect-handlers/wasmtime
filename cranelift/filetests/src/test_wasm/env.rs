@@ -726,7 +726,7 @@ impl<'a> FuncEnvironment for FuncEnv<'a> {
         base_addr: ir::Value,
     ) {
         self.inner
-            .typed_continuation_store_payloads(builder, valtypes, values, base_addr)
+            .typed_continuations_store_payloads(builder, valtypes, values, base_addr)
     }
 
     /// TODO
