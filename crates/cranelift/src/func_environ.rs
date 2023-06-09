@@ -2346,7 +2346,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                     offset,
                 );
                 values.push(val);
-                offset += self.offsets.ptr.size_of_vmglobal_definition() as i32;
+                offset += self.offsets.ptr.maximum_value_size() as i32;
             }
         } else {
             panic!("Unsupported continuation arity!");
@@ -2372,7 +2372,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                 i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
             for value in values {
                 builder.ins().store(memflags, *value, base_addr, offset);
-                offset += self.offsets.ptr.size_of_vmglobal_definition() as i32;
+                offset += self.offsets.ptr.maximum_value_size() as i32;
             }
         } else {
             panic!("Unsupported continuation arity!");
