@@ -84,9 +84,6 @@
     (local.get $i32_acc)
     (local.get $i64_acc))
 
-
-
-
 )
 
 (assert_return (invoke "test") (i32.const 1111) (i64.const 110_000_000_000))
