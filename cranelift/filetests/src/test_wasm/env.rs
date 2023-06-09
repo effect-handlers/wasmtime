@@ -646,11 +646,11 @@ impl<'a> FuncEnvironment for FuncEnv<'a> {
         unimplemented!()
     }
 
-/// TODO(dhil): write documentation.
+    /// TODO(dhil): write documentation.
     fn translate_cont_new(
         &mut self,
-        pos: FuncCursor,
-        state: &FuncTranslationState,
+        pos: cranelift_codegen::cursor::FuncCursor,
+        state: &cranelift_wasm::FuncTranslationState,
         func: ir::Value,
         arg_types: &[wasmtime_types::WasmType],
     ) -> cranelift_wasm::WasmResult<ir::Value> {
@@ -664,28 +664,35 @@ impl<'a> FuncEnvironment for FuncEnv<'a> {
     /// signal is 1).
     fn translate_resume(
         &mut self,
-        builder: &mut FunctionBuilder,
-        state: &FuncTranslationState,
+        builder: &mut cranelift_frontend::FunctionBuilder,
+        state: &cranelift_wasm::FuncTranslationState,
         cont: ir::Value,
         call_arg_types: &[wasmtime_types::WasmType],
         call_args: &[ir::Value],
     ) -> cranelift_wasm::WasmResult<(ir::Value, ir::Value, ir::Value)> {
-        self.inner.translate_resume(builder, state, cont, call_arg_types, call_args)
+        self.inner
+            .translate_resume(builder, state, cont, call_arg_types, call_args)
     }
 
     /// TODO(dhil): write documentation.
     fn translate_resume_throw(
         &mut self,
-        pos: FuncCursor,
-        state: &FuncTranslationState,
+        pos: cranelift_codegen::cursor::FuncCursor,
+        state: &cranelift_wasm::FuncTranslationState,
         tag_index: u32,
         cont: ir::Value,
     ) -> cranelift_wasm::WasmResult<ir::Value> {
-        self.inner.translate_resume_throw(pos, state, tag_index, cont)
+        self.inner
+            .translate_resume_throw(pos, state, tag_index, cont)
     }
 
     /// TODO(dhil): write documentation.
-    fn translate_suspend(&mut self, pos: FuncCursor, state: &FuncTranslationState, tag_index: u32) {
+    fn translate_suspend(
+        &mut self,
+        pos: cranelift_codegen::cursor::FuncCursor,
+        state: &cranelift_wasm::FuncTranslationState,
+        tag_index: u32,
+    ) {
         self.inner.translate_suspend(pos, state, tag_index)
     }
 
@@ -702,22 +709,24 @@ impl<'a> FuncEnvironment for FuncEnv<'a> {
     /// TODO
     fn typed_continuations_load_payloads(
         &self,
-        builder: &mut FunctionBuilder,
+        builder: &mut cranelift_frontend::FunctionBuilder,
         valtypes: &[wasmtime_types::WasmType],
         base_addr: ir::Value,
     ) -> std::vec::Vec<ir::Value> {
-        self.inner.typed_continuations_load_payloads(builder, valtypes, base_addr)
+        self.inner
+            .typed_continuations_load_payloads(builder, valtypes, base_addr)
     }
 
     /// TODO
     fn typed_continuations_store_payloads(
         &self,
-        builder: &mut FunctionBuilder,
+        builder: &mut cranelift_frontend::FunctionBuilder,
         valtypes: &[wasmtime_types::WasmType],
         values: &[ir::Value],
         base_addr: ir::Value,
     ) {
-        self.typed_continuation_store_payloads(builder, valtypes, values, base_addr)
+        self.inner
+            .typed_continuation_store_payloads(builder, valtypes, values, base_addr)
     }
 
     /// TODO
@@ -733,9 +742,10 @@ impl<'a> FuncEnvironment for FuncEnv<'a> {
     /// TODO
     fn typed_continuations_load_continuation_object(
         &self,
-        builder: &mut FunctionBuilder,
+        builder: &mut cranelift_frontend::FunctionBuilder,
         base_addr: ir::Value,
     ) -> ir::Value {
-        self.inner.typed_continuations_load_continuation_object(builder, base_addr)
+        self.inner
+            .typed_continuations_load_continuation_object(builder, base_addr)
     }
 }
