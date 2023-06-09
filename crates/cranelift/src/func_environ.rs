@@ -2339,9 +2339,12 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             let mut offset =
                 i32::try_from(self.offsets.vmctx_typed_continuations_payloads()).unwrap();
             for valtype in valtypes {
-                let val = builder
-                    .ins()
-                    .load(convert_type(*valtype), memflags, base_addr, offset);
+                let val = builder.ins().load(
+                    super::value_type(self.isa, *valtype),
+                    memflags,
+                    base_addr,
+                    offset,
+                );
                 values.push(val);
                 offset += self.offsets.ptr.size_of_vmglobal_definition() as i32;
             }
@@ -2390,13 +2393,5 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
     fn use_x86_blendv_for_relaxed_laneselect(&self, ty: Type) -> bool {
         self.isa.has_x86_blendv_lowering(ty)
-    }
-}
-
-fn convert_type(ty: WasmType) -> ir::Type {
-    match ty {
-        WasmType::I32 => ir::types::I32,
-        WasmType::I64 => ir::types::I64,
-        _ => todo!(),
     }
 }
