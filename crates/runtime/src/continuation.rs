@@ -14,7 +14,7 @@ type Yield = Suspend<(), u32, ()>;
 struct Args {
     length: usize,
     capacity: usize,
-    /// This is null if and only if capacity (and thus also payload_length) are 0.
+    /// This is null if and only if capacity (and thus also `length`) are 0.
     data: *mut u128,
 }
 
@@ -111,8 +111,10 @@ pub fn cont_obj_occupy_next_args_slots(
 /// TODO
 #[inline(always)]
 pub fn cont_obj_has_state_invoked(obj: *mut ContinuationObject) -> bool {
-    // We use this function to determine whether a contination object is in initialisation mode or not.
-    // FIXME(frank-emrich) Rename this function to make it clearer that we shouldn't call it in `Returned` mode
+    // We use this function to determine whether a contination object is in initialisation mode or
+    // not.
+    // FIXME(frank-emrich) Rename this function to make it clearer that we shouldn't call
+    // it in `Returned` state.
     assert!(unsafe { (*obj).state != State::Returned });
 
     return unsafe { (*obj).state == State::Invoked };
