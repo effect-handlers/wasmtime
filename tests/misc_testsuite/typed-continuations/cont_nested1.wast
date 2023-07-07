@@ -1,6 +1,5 @@
 ;; test using continuations from within a continuation
 
-
 (module
 
   (type $unit_to_unit (func))

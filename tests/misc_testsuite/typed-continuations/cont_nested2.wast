@@ -1,7 +1,6 @@
 ;; test using continuations from within a continuation
 
 
-
 (module
 
   (type $unit_to_unit (func))
@@ -49,26 +48,21 @@
   (elem declare func $g2)
 
   (func $g3
-        (call $update_marker (i32.const 17))
-        (resume $g2_res_type_ct (cont.new $g2_res_type_ct (ref.func $g2)))
-        (call $update_marker (i32.const 19))
-        (suspend $e2)
-        )
+    (call $update_marker (i32.const 17))
+    (resume $g2_res_type_ct (cont.new $g2_res_type_ct (ref.func $g2)))
+    (call $update_marker (i32.const 19))
+    (suspend $e2))
   (elem declare func $g3)
 
 
   (func $test (export "test") (result i32)
-        (call $update_marker (i32.const 23))
-        (block $on_e2 (result (ref $ct) (ref $ct))
-          (resume $ct (tag $e2 $on_e2) (cont.new $ct (ref.func $g3)))
-          (unreachable))
-        (drop) ;; we won't resume g3, but want the payload
-        (call $update_marker (i32.const 31))
-        (resume $ct)
-        (global.get $marker))
-
-  ;;(elem declare func $g)
-
-  )
+    (call $update_marker (i32.const 23))
+    (block $on_e2 (result (ref $ct) (ref $ct))
+      (resume $ct (tag $e2 $on_e2) (cont.new $ct (ref.func $g3)))
+      (unreachable))
+    (drop) ;; we won't resume g3, but want the payload
+    (call $update_marker (i32.const 31))
+    (resume $ct)
+    (global.get $marker)))
 
 (assert_return (invoke "test") (i32.const 490_074_902))
