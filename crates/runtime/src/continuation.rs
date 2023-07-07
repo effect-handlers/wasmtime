@@ -11,7 +11,6 @@ use wasmtime_fibre::{Fiber, FiberStack, Suspend};
 type ContinuationFiber = Fiber<'static, (), u32, ()>;
 type Yield = Suspend<(), u32, ()>;
 
-/// Similar to Vector<*mut u128>, but allowing us to hand out the `data` pointer to generated code.
 struct Args {
     length: usize,
     capacity: usize,
@@ -29,17 +28,20 @@ impl Args {
     }
 }
 
-/// Encodes the life cycle of a `ContinuationObject`
+/// Encodes the life cycle of a `ContinuationObject`.
 #[derive(PartialEq)]
 enum State {
-    /// The `ContinuationObject` has been created, but `resume` has never been called on it.
-    /// During this stage, we may add arguments using `cont.bind`
-    Initialisation,
-    /// `resume` has been invoked at least once on the `ContinuationObject`, meaning that the function passed to `cont.new` has started executing.
-    /// Note that this state does not indicate whether the execution of this function is currently suspended or not.
+    /// The `ContinuationObject` has been created, but `resume` has never been
+    /// called on it. During this stage, we may add arguments using `cont.bind`.
+    Allocated,
+    /// `resume` has been invoked at least once on the `ContinuationObject`,
+    /// meaning that the function passed to `cont.new` has started executing.
+    /// Note that this state does not indicate whether the execution of this
+    /// function is currently suspended or not.
     Invoked,
     /// The function originally passed to `cont.new` has returned normally.
-    /// Note that there is no guarantee that a ContinuationObject will ever reach this status, as it may stay suspended until being dropped.
+    /// Note that there is no guarantee that a ContinuationObject will ever
+    /// reach this status, as it may stay suspended until being dropped.
     Returned,
 }
 
@@ -48,10 +50,10 @@ enum State {
 pub struct ContinuationObject {
     fiber: *mut ContinuationFiber,
 
-    /// Used to store payload data that is
-    /// 1. supplied by cont.bind
-    /// 2. supplied by resume
-    /// 3. supplied when suspending to a tag
+    /// Used to store
+    /// 1. The arguments to the function passed to cont.new
+    /// 2. The return values of that function
+    /// Note that this is *not* used for tag payloads.
     args: Args,
 
     state: State,
@@ -99,7 +101,7 @@ pub fn cont_obj_occupy_next_args_slots(
     obj: *mut ContinuationObject,
     arg_count: usize,
 ) -> *mut u128 {
-    assert!(unsafe { (*obj).state == State::Initialisation });
+    assert!(unsafe { (*obj).state == State::Allocated });
     let args_len = unsafe { (*obj).args.length };
     unsafe { (*obj).args.length += arg_count };
     assert!(unsafe { (*obj).args.length <= (*obj).args.capacity });
@@ -135,7 +137,14 @@ pub fn drop_cont_obj(contobj: *mut ContinuationObject) {
 
 /// TODO
 pub fn alllocate_payload_buffer(instance: &mut Instance, element_count: usize) -> *mut u128 {
-    assert!(element_count > 0);
+    // In the current design, we allocate a `Vec<u128>` and store a pointer to
+    // it in the `VMContext` payloads pointer slot. We then return the pointer
+    // to the `Vec`'s data, not to the `Vec` itself.
+    // This is mostly for debugging purposes, since the `Vec` stores its size.
+    // Alternatively, we may allocate the buffer ourselves here and store the
+    // pointer directly in the `VMContext`. This would avoid one level of
+    // pointer indirection.
+
     let payload_ptr =
         unsafe { instance.get_typed_continuations_payloads_ptr_mut() as *mut *mut Vec<u128> };
 
@@ -155,7 +164,6 @@ pub fn alllocate_payload_buffer(instance: &mut Instance, element_count: usize) -
 
 /// TODO
 pub fn dealllocate_payload_buffer(instance: &mut Instance, element_count: usize) {
-    assert!(element_count > 0);
     let payload_ptr =
         unsafe { instance.get_typed_continuations_payloads_ptr_mut() as *mut *mut Vec<u128> };
 
@@ -166,12 +174,11 @@ pub fn dealllocate_payload_buffer(instance: &mut Instance, element_count: usize)
 
     unsafe { *payload_ptr = ptr::null_mut() };
 
-    // buffer destroyed when `vec` goes out of scope
+    // payload buffer destroyed when `vec` goes out of scope
 }
 
 /// TODO
 pub fn get_payload_buffer(instance: &mut Instance, element_count: usize) -> *mut u128 {
-    assert!(element_count > 0);
     let payload_ptr =
         unsafe { instance.get_typed_continuations_payloads_ptr_mut() as *mut *mut Vec<u128> };
 
@@ -230,7 +237,7 @@ pub fn cont_new(
     let contobj = Box::new(ContinuationObject {
         fiber: Box::into_raw(fiber),
         args: payload,
-        state: State::Initialisation,
+        state: State::Allocated,
     });
     let contref = new_cont_ref(Box::into_raw(contobj));
     contref // TODO(dhil): we need memory clean up of
@@ -243,9 +250,7 @@ pub fn resume(
     instance: &mut Instance,
     contobj: *mut ContinuationObject,
 ) -> Result<u32, TrapReason> {
-    assert!(unsafe {
-        (*contobj).state == State::Initialisation || (*contobj).state == State::Invoked
-    });
+    assert!(unsafe { (*contobj).state == State::Allocated || (*contobj).state == State::Invoked });
     let fiber = unsafe { (*contobj).fiber };
     let fiber_stack = unsafe { &fiber.as_ref().unwrap().stack() };
     let tsp = TopOfStackPointer::as_raw(instance.tsp());

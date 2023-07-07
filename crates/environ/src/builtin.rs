@@ -57,33 +57,36 @@ macro_rules! foreach_builtin_function {
             resume(vmctx: vmctx, contobj: pointer) -> i32;
             /// Suspends a continuation.
             suspend(vmctx: vmctx, tag: i32);
-
-            /// Projects the continuation result value buffer.
-            /// Must only be called after the continuation returned and the executed function has return values.
+            /// Projects the buffer storing the results after a continuation
+            /// function has returned normally.
+            /// Must only be called after the continuation has returned and
+            /// the executed function has return values.
             cont_obj_get_results(vmctx: vmctx, contobj: pointer) -> pointer;
-            /// Projects a pointer within the continuation argument buffer pointing at
-            /// the next free slot.
+            /// Projects a pointer within the continuation argument buffer
+            /// pointing at the next free slot. Marks the next `arg_count`
+            /// entries in that buffer as used.
             cont_obj_occupy_next_args_slots(vmctx: vmctx, contobj: pointer, arg_count: i32) -> pointer;
-
-
-            /// Returns a boolean indicating whether the status flag of the continutation object is `Invoked`
+            /// Returns a boolean indicating whether the state of the continutation object is `Invoked`
             cont_obj_has_state_invoked(vmctx: vmctx, contobj: pointer) -> i32;
-
-            /// Projects the continuation suspend payloads buffer.
+            /// Returns the continuation object corresponding to the given continuation reference.
             cont_ref_get_cont_obj(vmctx: vmctx, contref: pointer) -> pointer;
-            /// Drops the given continuation object.
+            /// Drops the given continuation object. Currently unused.
             //cont_obj_drop(vmctx: vmctx, contobj: pointer);
             /// Crates a new continuation reference.
             new_cont_ref(vmctx: vmctx, contobj: pointer) -> pointer;
-            /// Populates the typed continuation payload buffer within the vmcontext,
-            /// large enough to hold the given number of raw values and returns the pointer to the buffer.
+            /// Allocates a buffer large enough for storing `element_count` tag
+            /// payloads and stores it in the `VMContext` in such a way that
+            /// subsequent calls to `get_payload_buffer` will return the same
+            /// buffer.
+            /// Returns a pointer to that buffer.
             alllocate_payload_buffer(vmctx: vmctx, element_count: i32) -> pointer;
-
-
-            /// Counterpart to previous function.
+            /// Counterpart to `alllocate_payload_buffer`, deallocating the
+            /// buffer. For debugging purposes, `expected_element_capacity`
+            /// should be the same value passed when allocating.
             dealllocate_payload_buffer(vmctx: vmctx, expected_element_capacity: i32);
-
-            /// Returns pointer
+            /// Returns pointer to the payload buffer. For debugging purposes,
+            /// `expected_element_capacity` should be the same value passed when
+            /// allocating.
             get_payload_buffer(vmctx: vmctx, expected_element_capacity: i32) -> pointer;
         }
     };
