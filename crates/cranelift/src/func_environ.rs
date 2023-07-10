@@ -2329,10 +2329,11 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
         tag_index: u32,
-    ) {
+    ) -> ir::Value {
         let tag_index = builder.ins().iconst(I32, tag_index as i64);
 
-        generate_builtin_call_no_return_val!(self, builder, suspend, [tag_index]);
+        // Returns the vmctx
+        return generate_builtin_call_no_return_val!(self, builder, suspend, [tag_index]);
     }
 
     fn continuation_arguments(&self, index: u32) -> &[WasmType] {
@@ -2387,6 +2388,48 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                 dealllocate_payload_buffer,
                 [nargs]
             );
+        }
+        values
+    }
+
+    fn typed_continuations_load_tag_return_values(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        contobj: ir::Value,
+        valtypes: &[WasmType],
+    ) -> Vec<ir::Value> {
+        let memflags = ir::MemFlags::trusted();
+        let mut values = vec![];
+
+        if valtypes.len() > 0 {
+            let nargs = builder.ins().iconst(I32, valtypes.len() as i64);
+
+            let (_vmctx, payload_ptr) = generate_builtin_call!(
+                self,
+                builder,
+                cont_obj_get_tag_return_values_buffer,
+                [contobj, nargs]
+            );
+
+            let mut offset = 0;
+            for valtype in valtypes {
+                let val = builder.ins().load(
+                    super::value_type(self.isa, *valtype),
+                    memflags,
+                    payload_ptr,
+                    offset,
+                );
+                values.push(val);
+                offset += self.offsets.ptr.maximum_value_size() as i32;
+            }
+
+            todo!();
+            // generate_builtin_call_no_return_val!(
+            //     self,
+            //     builder,
+            //     cont_obj_deallocate_return_values_buffer,
+            //     [contobj]
+            // );
         }
         values
     }

@@ -2589,10 +2589,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             environ.typed_continuations_store_payloads(builder, &param_types, params);
             state.popn(param_count);
 
-            environ.translate_suspend(builder, state, *tag_index);
+            let vmctx = environ.translate_suspend(builder, state, *tag_index);
+
+            let contobj = environ.typed_continuations_load_continuation_object(builder, vmctx);
 
             let return_types = environ.tag_returns(*tag_index).to_vec();
-            let return_values = environ.typed_continuations_load_payloads(builder, &return_types);
+            let return_values =
+                environ.typed_continuations_load_tag_return_values(builder, contobj, &return_types);
 
             state.pushn(&return_values);
         }

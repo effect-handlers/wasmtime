@@ -139,7 +139,7 @@ pub fn cont_obj_occupy_next_tag_returns_slots(
 }
 
 /// TODO
-pub fn cont_obj_get_tag_return_values(
+pub fn cont_obj_get_tag_return_values_buffer(
     obj: *mut ContinuationObject,
     expected_value_count: usize,
 ) -> *mut u128 {
@@ -303,6 +303,13 @@ pub fn resume(
             .get_mut()) = 0
     };
     unsafe { (*contobj).state = State::Invoked };
+    // This is to make sure that after we resume from a suspend, we can load the continuation object
+    // to access the tag return values.
+    unsafe {
+        let cont_store_ptr =
+            instance.get_typed_continuations_store_mut() as *mut *mut ContinuationObject;
+        cont_store_ptr.write(contobj)
+    };
     match unsafe { fiber.as_mut().unwrap().resume(()) } {
         Ok(()) => {
             // The result of the continuation was written to the first

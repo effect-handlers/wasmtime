@@ -701,12 +701,12 @@ fn cont_obj_occupy_next_tag_returns_slots(
     ) as *mut u8
 }
 
-fn cont_obj_get_tag_return_values(
+fn cont_obj_get_tag_return_values_buffer(
     _instance: &mut Instance,
     contobj: *mut u8,
     expected_value_count: u32,
 ) -> *mut u8 {
-    crate::continuation::cont_obj_get_tag_return_values(
+    crate::continuation::cont_obj_get_tag_return_values_buffer(
         contobj as *mut crate::continuation::ContinuationObject,
         expected_value_count as usize,
     ) as *mut u8

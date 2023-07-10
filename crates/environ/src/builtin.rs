@@ -89,7 +89,7 @@ macro_rules! foreach_builtin_function {
             /// allocating.
             get_payload_buffer(vmctx: vmctx, expected_element_capacity: i32) -> pointer;
             /// TODO
-            cont_obj_get_tag_return_values(vmctx: vmctx, contobj: pointer, expected_count : i32) -> pointer;
+            cont_obj_get_tag_return_values_buffer(vmctx: vmctx, contobj: pointer, expected_count : i32) -> pointer;
             /// TODO
             cont_obj_occupy_next_tag_returns_slots(vmctx: vmctx, contobj: pointer, arg_count : i32, remaining_arg_count : i32) -> pointer;
         }
