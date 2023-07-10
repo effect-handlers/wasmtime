@@ -19,11 +19,19 @@ struct Payloads {
 }
 
 impl Payloads {
-    fn empty() -> Payloads {
+    fn new(capacity: usize) -> Payloads {
+        let data = if capacity == 0 {
+            ptr::null_mut()
+        } else {
+            let mut args = Vec::with_capacity(capacity);
+            let args_ptr = args.as_mut_ptr();
+            args.leak();
+            args_ptr
+        };
         return Payloads {
             length: 0,
-            capacity: 0,
-            data: ptr::null_mut(),
+            capacity,
+            data,
         };
     }
 
@@ -217,18 +225,7 @@ pub fn cont_new(
     };
     let capacity = cmp::max(param_count, result_count);
 
-    let payload = if capacity == 0 {
-        Payloads::empty()
-    } else {
-        let mut args = Vec::with_capacity(capacity);
-        let args_ptr = args.as_mut_ptr();
-        args.leak();
-        Payloads {
-            length: 0,
-            capacity,
-            data: args_ptr,
-        }
-    };
+    let payload = Payloads::new(capacity);
 
     let args_ptr = payload.data;
     let fiber = Box::new(
