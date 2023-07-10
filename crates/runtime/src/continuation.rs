@@ -11,16 +11,16 @@ use wasmtime_fibre::{Fiber, FiberStack, Suspend};
 type ContinuationFiber = Fiber<'static, (), u32, ()>;
 type Yield = Suspend<(), u32, ()>;
 
-struct Args {
+struct Payloads {
     length: usize,
     capacity: usize,
     /// This is null if and only if capacity (and thus also `length`) are 0.
     data: *mut u128,
 }
 
-impl Args {
-    fn empty() -> Args {
-        return Args {
+impl Payloads {
+    fn empty() -> Payloads {
+        return Payloads {
             length: 0,
             capacity: 0,
             data: ptr::null_mut(),
@@ -54,7 +54,7 @@ pub struct ContinuationObject {
     /// 1. The arguments to the function passed to cont.new
     /// 2. The return values of that function
     /// Note that this is *not* used for tag payloads.
-    args: Args,
+    args: Payloads,
 
     state: State,
 }
@@ -213,12 +213,12 @@ pub fn cont_new(
     let capacity = cmp::max(param_count, result_count);
 
     let payload = if capacity == 0 {
-        Args::empty()
+        Payloads::empty()
     } else {
         let mut args = Vec::with_capacity(capacity);
         let args_ptr = args.as_mut_ptr();
         args.leak();
-        Args {
+        Payloads {
             length: 0,
             capacity,
             data: args_ptr,
