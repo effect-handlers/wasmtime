@@ -2597,10 +2597,27 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.pushn(&return_values);
         }
         Operator::ContBind {
-            src_index: _,
-            dst_index: _,
+            src_index,
+            dst_index,
+        } => {
+            let src_arity = environ.continuation_arguments(*src_index).len();
+            let dst_arity = environ.continuation_arguments(*dst_index).len();
+            let arg_count = src_arity - dst_arity;
+
+            let (original_contref, args) = state.peekn(arg_count + 1).split_last().unwrap();
+
+            let contobj =
+                environ.typed_continuations_cont_ref_get_cont_obj(builder, *original_contref);
+
+            if arg_count > 0 {
+                environ.typed_continuations_store_resume_args(builder, args, contobj);
+            }
+
+            let new_contref = environ.typed_continuations_new_cont_ref(builder, contobj);
+
+            state.push1(new_contref);
         }
-        | Operator::ResumeThrow {
+        Operator::ResumeThrow {
             type_index: _,
             tag_index: _,
             resumetable: _,
