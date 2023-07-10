@@ -31,7 +31,7 @@ impl Payloads {
         let original_length = self.length;
         assert!(self.length + count <= self.capacity);
         self.length += count;
-        return unsafe {self.data.offset(original_length as isize)};
+        return unsafe { self.data.offset(original_length as isize) };
     }
 }
 
@@ -109,7 +109,7 @@ pub fn cont_obj_occupy_next_args_slots(
     arg_count: usize,
 ) -> *mut u128 {
     assert!(unsafe { (*obj).state == State::Allocated });
-    let args = &mut unsafe {obj.as_mut()}.unwrap().args;
+    let args = &mut unsafe { obj.as_mut() }.unwrap().args;
     return args.occupy_next(arg_count);
 }
 
