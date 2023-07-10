@@ -688,6 +688,30 @@ fn cont_obj_has_state_invoked(
     ) as u32)
 }
 
+fn cont_obj_occupy_next_tag_returns_slots(
+    _instance: &mut Instance,
+    contobj: *mut u8,
+    arg_count: u32,
+    overall_return_value_count: u32,
+) -> *mut u8 {
+    crate::continuation::cont_obj_occupy_next_tag_returns_slots(
+        contobj as *mut crate::continuation::ContinuationObject,
+        arg_count as usize,
+        overall_return_value_count as usize,
+    ) as *mut u8
+}
+
+fn cont_obj_get_tag_return_values(
+    _instance: &mut Instance,
+    contobj: *mut u8,
+    expected_value_count: u32,
+) -> *mut u8 {
+    crate::continuation::cont_obj_get_tag_return_values(
+        contobj as *mut crate::continuation::ContinuationObject,
+        expected_value_count as usize,
+    ) as *mut u8
+}
+
 fn alllocate_payload_buffer(instance: &mut Instance, element_count: u32) -> *mut u8 {
     crate::continuation::alllocate_payload_buffer(instance, element_count as usize) as *mut u8
 }

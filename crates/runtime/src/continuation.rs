@@ -71,6 +71,8 @@ pub struct ContinuationObject {
     /// Note that this is *not* used for tag payloads.
     args: Payloads,
 
+    tag_return_values: Option<Box<Payloads>>,
+
     state: State,
 }
 
@@ -123,6 +125,36 @@ pub fn cont_obj_occupy_next_args_slots(
 
 /// TODO
 #[inline(always)]
+pub fn cont_obj_occupy_next_tag_returns_slots(
+    obj: *mut ContinuationObject,
+    arg_count: usize,
+    overall_return_value_count: usize,
+) -> *mut u128 {
+    let obj = unsafe { obj.as_mut().unwrap() };
+    assert!(obj.state == State::Invoked);
+    let payloads = obj
+        .tag_return_values
+        .get_or_insert_with(|| Box::new(Payloads::new(overall_return_value_count)));
+    return payloads.occupy_next(arg_count);
+}
+
+/// TODO
+pub fn cont_obj_get_tag_return_values(
+    obj: *mut ContinuationObject,
+    expected_value_count: usize,
+) -> *mut u128 {
+    let obj = unsafe { obj.as_mut().unwrap() };
+    assert!(obj.state == State::Invoked);
+
+    let payloads = &mut obj.tag_return_values.as_ref().unwrap();
+    assert_eq!(payloads.length, expected_value_count);
+    assert_eq!(payloads.length, payloads.capacity);
+    assert!(!payloads.data.is_null());
+    return payloads.data;
+}
+
+/// TODO
+#[inline(always)]
 pub fn cont_obj_has_state_invoked(obj: *mut ContinuationObject) -> bool {
     // We use this function to determine whether a contination object is in initialisation mode or
     // not.
@@ -146,8 +178,12 @@ pub fn drop_cont_obj(contobj: *mut ContinuationObject) {
     mem::drop(unsafe { (*contobj).fiber });
     unsafe {
         mem::drop((*contobj).args.data);
+    };
+    let tag_return_vals = &mut unsafe { contobj.as_mut().unwrap() }.tag_return_values;
+    match tag_return_vals {
+        None => (),
+        Some(b) => mem::drop((*b).data),
     }
-    mem::drop(contobj)
 }
 
 /// TODO
@@ -241,6 +277,7 @@ pub fn cont_new(
     let contobj = Box::new(ContinuationObject {
         fiber: Box::into_raw(fiber),
         args: payload,
+        tag_return_values: None,
         state: State::Allocated,
     });
     let contref = new_cont_ref(Box::into_raw(contobj));
