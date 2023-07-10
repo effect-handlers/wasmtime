@@ -154,6 +154,15 @@ pub fn cont_obj_get_tag_return_values_buffer(
 }
 
 /// TODO
+pub fn cont_obj_deallocate_tag_return_values_buffer(obj: *mut ContinuationObject) {
+    let obj = unsafe { obj.as_mut().unwrap() };
+    assert!(obj.state == State::Invoked);
+    let existing = obj.tag_return_values.take().unwrap();
+    mem::drop((*existing).data);
+    obj.tag_return_values = None;
+}
+
+/// TODO
 #[inline(always)]
 pub fn cont_obj_has_state_invoked(obj: *mut ContinuationObject) -> bool {
     // We use this function to determine whether a contination object is in initialisation mode or

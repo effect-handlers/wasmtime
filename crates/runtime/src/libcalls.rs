@@ -712,6 +712,12 @@ fn cont_obj_get_tag_return_values_buffer(
     ) as *mut u8
 }
 
+fn cont_obj_deallocate_tag_return_values_buffer(_instance: &mut Instance, contobj: *mut u8) {
+    crate::continuation::cont_obj_deallocate_tag_return_values_buffer(
+        contobj as *mut crate::continuation::ContinuationObject,
+    );
+}
+
 fn alllocate_payload_buffer(instance: &mut Instance, element_count: u32) -> *mut u8 {
     crate::continuation::alllocate_payload_buffer(instance, element_count as usize) as *mut u8
 }

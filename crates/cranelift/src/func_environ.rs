@@ -2423,13 +2423,12 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                 offset += self.offsets.ptr.maximum_value_size() as i32;
             }
 
-            todo!();
-            // generate_builtin_call_no_return_val!(
-            //     self,
-            //     builder,
-            //     cont_obj_deallocate_return_values_buffer,
-            //     [contobj]
-            // );
+            generate_builtin_call_no_return_val!(
+                self,
+                builder,
+                cont_obj_deallocate_tag_return_values_buffer,
+                [contobj]
+            );
         }
         values
     }
