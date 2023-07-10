@@ -71,6 +71,9 @@ pub struct ContinuationObject {
     /// Note that this is *not* used for tag payloads.
     args: Payloads,
 
+    // Once a continuation is suspended, this buffer is used to hold payloads
+    // provided by cont.bind and resume and received at the suspend site.
+    // In particular, this may only be Some when `state` is `Invoked`.
     tag_return_values: Option<Box<Payloads>>,
 
     state: State,
