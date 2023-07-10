@@ -2608,7 +2608,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let contobj =
                 environ.typed_continuations_cont_ref_get_cont_obj(builder, *original_contref);
 
-            environ.typed_continuations_store_resume_args(builder, args, contobj);
+            let src_arity_value = builder.ins().iconst(I32, src_arity as i64);
+            environ.typed_continuations_store_resume_args(builder, args, src_arity_value, contobj);
 
             let new_contref = environ.typed_continuations_new_cont_ref(builder, contobj);
 

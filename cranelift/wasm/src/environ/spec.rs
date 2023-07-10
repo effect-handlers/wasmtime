@@ -638,6 +638,7 @@ pub trait FuncEnvironment: TargetEnvironment {
         &mut self,
         builder: &mut FunctionBuilder,
         values: &[ir::Value],
+        remaining_arg_count: ir::Value,
         contobj: ir::Value,
     );
 

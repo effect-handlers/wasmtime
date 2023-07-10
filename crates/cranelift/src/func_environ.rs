@@ -2292,7 +2292,8 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         // Second: Call the `resume` builtin
 
         if call_args.len() > 0 {
-            self.typed_continuations_store_resume_args(builder, call_args, contobj);
+            let count = builder.ins().iconst(I32, call_args.len() as i64);
+            self.typed_continuations_store_resume_args(builder, call_args, count, contobj);
         }
 
         let (vmctx, result) = generate_builtin_call!(self, builder, resume, [contobj]);
@@ -2406,6 +2407,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         builder: &mut FunctionBuilder,
         values: &[ir::Value],
+        remaining_arg_count: ir::Value,
         contobj: ir::Value,
     ) {
         let nargs = builder.ins().iconst(I32, values.len() as i64);
@@ -2438,8 +2440,12 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             {
                 builder.switch_to_block(use_payloads_block);
                 builder.seal_block(use_payloads_block);
-                let (_vmctx, ptr) =
-                    generate_builtin_call!(self, builder, alllocate_payload_buffer, [nargs]);
+                let (_vmctx, ptr) = generate_builtin_call!(
+                    self,
+                    builder,
+                    cont_obj_occupy_next_tag_returns_slots,
+                    [contobj, nargs, remaining_arg_count]
+                );
                 builder.ins().jump(store_data_block, &[ptr]);
             }
 

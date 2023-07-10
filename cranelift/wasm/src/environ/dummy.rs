@@ -742,6 +742,7 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         &mut self,
         _builder: &mut FunctionBuilder,
         _values: &[ir::Value],
+        _remaining_arg_count: ir::Value,
         _contref: ir::Value,
     ) {
         todo!()

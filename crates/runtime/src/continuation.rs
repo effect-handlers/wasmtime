@@ -128,13 +128,13 @@ pub fn cont_obj_occupy_next_args_slots(
 pub fn cont_obj_occupy_next_tag_returns_slots(
     obj: *mut ContinuationObject,
     arg_count: usize,
-    overall_return_value_count: usize,
+    remaining_arg_count: usize,
 ) -> *mut u128 {
     let obj = unsafe { obj.as_mut().unwrap() };
     assert!(obj.state == State::Invoked);
     let payloads = obj
         .tag_return_values
-        .get_or_insert_with(|| Box::new(Payloads::new(overall_return_value_count)));
+        .get_or_insert_with(|| Box::new(Payloads::new(remaining_arg_count)));
     return payloads.occupy_next(arg_count);
 }
 
