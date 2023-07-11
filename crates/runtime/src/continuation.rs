@@ -8,15 +8,6 @@ use std::mem;
 use std::ptr;
 use wasmtime_fibre::{Fiber, FiberStack, Suspend};
 
-/// Until we implement proper reference counting for `ContinuationReference` objects,
-/// we may use this flag to bypass the creation of ContinuationReference objects,
-/// directly using the corresponding ContinuationObject instead.
-/// This is to allow running benchmarks that may create a lot of such objects and
-/// may otherwise run out of memory.
-/// Note that enabling this is highly unsafe, as it makes it impossible to detect
-/// at runtime when an already taken continuation is used again.
-pub const USE_CONTOBJ_AS_CONTREF: bool = false;
-
 type ContinuationFiber = Fiber<'static, (), u32, ()>;
 type Yield = Suspend<(), u32, ()>;
 
@@ -103,7 +94,7 @@ pub fn cont_ref_get_cont_obj(
     //FIXME rename to indicate that this invalidates the cont ref
 
     // If this is enabled, we should never call this function.
-    assert!(!USE_CONTOBJ_AS_CONTREF);
+    assert!(!cfg!(feature = "use_contobj_as_contref"));
 
     let contopt = unsafe { contref.as_mut().unwrap().0 };
     match contopt {
@@ -195,7 +186,7 @@ pub fn cont_obj_has_state_invoked(obj: *mut ContinuationObject) -> bool {
 #[inline(always)]
 pub fn new_cont_ref(contobj: *mut ContinuationObject) -> *mut ContinuationReference {
     // If this is enabled, we should never call this function.
-    assert!(!USE_CONTOBJ_AS_CONTREF);
+    assert!(!cfg!(feature = "use_contobj_as_contref"));
 
     let contref = Box::new(ContinuationReference(Some(contobj)));
     Box::into_raw(contref)

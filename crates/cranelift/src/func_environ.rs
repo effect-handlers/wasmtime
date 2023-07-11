@@ -23,8 +23,6 @@ use wasmtime_environ::{
 };
 use wasmtime_environ::{FUNCREF_INIT_BIT, FUNCREF_MASK};
 
-use wasmtime_runtime::continuation::USE_CONTOBJ_AS_CONTREF;
-
 macro_rules! declare_function_signatures {
     (
         $(
@@ -2436,7 +2434,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         contref: ir::Value,
     ) -> ir::Value {
-        if USE_CONTOBJ_AS_CONTREF {
+        if cfg!(feature = "use_contobj_as_contref") {
             // The "contref" is a contobj already
             return contref;
         } else {
@@ -2552,7 +2550,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         contobj_addr: ir::Value,
     ) -> ir::Value {
-        if USE_CONTOBJ_AS_CONTREF {
+        if cfg!(feature = "use_contobj_as_contref") {
             return contobj_addr;
         } else {
             let (_vmctx, contref) =
