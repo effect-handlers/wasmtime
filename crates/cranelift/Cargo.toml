@@ -13,7 +13,6 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 log = { workspace = true }
-wasmtime-runtime = { workspace = true }
 wasmtime-environ = { workspace = true }
 cranelift-wasm = { workspace = true }
 cranelift-codegen = { workspace = true }
