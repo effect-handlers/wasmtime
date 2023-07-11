@@ -267,7 +267,7 @@ pub fn cont_new(
     func: *mut u8,
     param_count: usize,
     result_count: usize,
-) -> *mut ContinuationReference {
+) -> *mut ContinuationObject {
     let func = func as *mut VMFuncRef;
     let callee_ctx = unsafe { (*func).vmctx };
     let caller_ctx = VMOpaqueContext::from_vmcontext(instance.vmctx());
@@ -298,9 +298,9 @@ pub fn cont_new(
         tag_return_values: None,
         state: State::Allocated,
     });
-    let contref = new_cont_ref(Box::into_raw(contobj));
-    contref // TODO(dhil): we need memory clean up of
-            // continuation reference objects.
+    // TODO(dhil): we need memory clean up of
+    // continuation reference objects.
+    return Box::into_raw(contobj);
 }
 
 /// TODO

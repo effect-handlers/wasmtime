@@ -2265,10 +2265,10 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let nargs = builder.ins().iconst(I64, arg_types.len() as i64);
         let nreturns = builder.ins().iconst(I64, return_types.len() as i64);
 
-        let (_vmctx, contref) =
+        let (_vmctx, contobj) =
             generate_builtin_call!(self, builder, cont_new, [func, nargs, nreturns]);
 
-        Ok(contref)
+        Ok(contobj)
     }
 
     // TODO(dhil): Currently, this function invokes
