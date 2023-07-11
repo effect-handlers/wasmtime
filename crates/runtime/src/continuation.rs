@@ -187,7 +187,7 @@ pub fn new_cont_ref(contobj: *mut ContinuationObject) -> *mut ContinuationRefere
 /// TODO
 #[inline(always)]
 pub fn drop_cont_obj(contobj: *mut ContinuationObject) {
-    mem::drop(unsafe { (*contobj).fiber });
+    unsafe { ptr::drop_in_place((*contobj).fiber) };
     unsafe {
         mem::drop((*contobj).args.data);
     };
@@ -329,6 +329,7 @@ pub fn resume(
             // calling trampoline to execute it.
 
             unsafe { (*contobj).state = State::Returned };
+            drop_cont_obj(contobj);
             Ok(0) // zero value = return normally.
         }
         Err(tag) => {
