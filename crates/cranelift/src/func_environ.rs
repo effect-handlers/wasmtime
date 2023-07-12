@@ -2385,7 +2385,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             generate_builtin_call_no_return_val!(
                 self,
                 builder,
-                dealllocate_payload_buffer,
+                deallocate_payload_buffer,
                 [nargs]
             );
         }
@@ -2523,7 +2523,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             let nargs = builder.ins().iconst(I32, values.len() as i64);
 
             let (_vmctx, payload_addr) =
-                generate_builtin_call!(self, builder, alllocate_payload_buffer, [nargs]);
+                generate_builtin_call!(self, builder, allocate_payload_buffer, [nargs]);
 
             let mut offset = 0;
             for value in values {
