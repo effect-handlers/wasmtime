@@ -106,6 +106,8 @@ macro_rules! foreach_builtin_function {
             cont_obj_get_tag_return_values_buffer(vmctx: vmctx, contobj: pointer, expected_count : i32) -> pointer;
             /// Deallocated the tag return value buffer within the continuation object.
             cont_obj_deallocate_tag_return_values_buffer(vmctx: vmctx, contobj: pointer);
+            /// TODO
+            drop_cont_obj(vmctx: vmctx, contobj: pointer);
         }
     };
 }

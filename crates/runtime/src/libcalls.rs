@@ -729,3 +729,7 @@ fn deallocate_payload_buffer(instance: &mut Instance, expected_element_capacity:
 fn get_payload_buffer(instance: &mut Instance, expected_element_capacity: u32) -> *mut u8 {
     crate::continuation::get_payload_buffer(instance, expected_element_capacity as usize) as *mut u8
 }
+
+fn drop_cont_obj(_instance: &mut Instance, contobj: *mut u8) {
+    crate::continuation::drop_cont_obj(contobj as *mut crate::continuation::ContinuationObject)
+}

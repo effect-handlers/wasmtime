@@ -2574,6 +2574,8 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                 offset += self.offsets.ptr.maximum_value_size() as i32;
             }
         }
+        // TODO(dhil): this is dirty.
+        generate_builtin_call_no_return_val!(self, builder, drop_cont_obj, [contobj]);
         return values;
     }
 
