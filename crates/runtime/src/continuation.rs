@@ -160,8 +160,9 @@ pub fn cont_obj_get_tag_return_values_buffer(
 pub fn cont_obj_deallocate_tag_return_values_buffer(obj: *mut ContinuationObject) {
     let obj = unsafe { obj.as_mut().unwrap() };
     assert!(obj.state == State::Invoked);
-    let payloads : Box<Payloads> = obj.tag_return_values.take().unwrap();
-    let _ : Vec<u128>  = unsafe { Vec::from_raw_parts((*payloads).data, (*payloads).length, (*payloads).capacity) };
+    let payloads: Box<Payloads> = obj.tag_return_values.take().unwrap();
+    let _: Vec<u128> =
+        unsafe { Vec::from_raw_parts((*payloads).data, (*payloads).length, (*payloads).capacity) };
     obj.tag_return_values = None;
 }
 
@@ -187,10 +188,14 @@ pub fn new_cont_ref(contobj: *mut ContinuationObject) -> *mut ContinuationRefere
 /// TODO
 #[inline(always)]
 pub fn drop_cont_obj(contobj: *mut ContinuationObject) {
-    let _ : Box<ContinuationFiber> = unsafe { Box::from_raw((*contobj).fiber) };
+    let _: Box<ContinuationFiber> = unsafe { Box::from_raw((*contobj).fiber) };
     //mem::drop(unsafe { (*contobj).fiber });
     unsafe {
-        let _ : Vec<u128> = Vec::from_raw_parts((*contobj).args.data, (*contobj).args.length, (*contobj).args.capacity);
+        let _: Vec<u128> = Vec::from_raw_parts(
+            (*contobj).args.data,
+            (*contobj).args.length,
+            (*contobj).args.capacity,
+        );
     };
     let tag_return_vals = &mut unsafe { contobj.as_mut().unwrap() }.tag_return_values;
     match tag_return_vals {

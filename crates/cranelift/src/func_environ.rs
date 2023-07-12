@@ -2382,12 +2382,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                 offset += self.offsets.ptr.maximum_value_size() as i32;
             }
 
-            generate_builtin_call_no_return_val!(
-                self,
-                builder,
-                deallocate_payload_buffer,
-                [nargs]
-            );
+            generate_builtin_call_no_return_val!(self, builder, deallocate_payload_buffer, [nargs]);
         }
         values
     }
