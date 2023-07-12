@@ -32,11 +32,11 @@
 #![allow(unused_macros)]
 
 use crate::RunResult;
+use std::alloc::{alloc, dealloc, Layout};
 use std::cell::Cell;
 use std::io;
 use std::ops::Range;
 use std::ptr;
-use std::alloc::{alloc, dealloc, Layout};
 
 #[derive(Debug)]
 pub struct FiberStack {
