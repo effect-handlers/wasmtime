@@ -87,8 +87,8 @@ impl FiberStack {
     pub fn malloc(size: usize) -> io::Result<Self> {
         unsafe {
             let layout = Layout::array::<u8>(size).unwrap();
-            let top = alloc(layout);
-            FiberStack::from_raw_parts(top, size)
+            let base = alloc(layout);
+            FiberStack::from_raw_parts(base, size)
         }
     }
 

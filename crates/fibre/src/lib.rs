@@ -29,7 +29,7 @@ impl FiberStack {
 
     /// Creates a new fiber stack of the given size (using malloc).
     pub fn malloc(size: usize) -> io::Result<Self> {
-        Ok(Self(imp::FiberStack::new(size)?))
+        Ok(Self(imp::FiberStack::malloc(size)?))
     }
 
     /// Creates a new fiber stack with the given pointer to the bottom of the
