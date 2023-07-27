@@ -2564,10 +2564,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         //
         // Second: Call the `resume` builtin
 
-        if call_args.len() > 0 {
-            let count = builder.ins().iconst(I32, call_args.len() as i64);
-            self.typed_continuations_store_resume_args(builder, call_args, count, contobj);
-        }
+
 
         let (vmctx, result) = generate_builtin_call!(self, builder, resume, [contobj]);
 
@@ -2601,7 +2598,7 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
-        tag_index: u32,
+        ir::Value,
     ) -> ir::Value {
         let tag_index = builder.ins().iconst(I32, tag_index as i64);
 

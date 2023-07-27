@@ -2507,15 +2507,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let (original_contref, call_args) = state.peekn(arity + 1).split_last().unwrap();
             let original_contobj =
                 environ.typed_continuations_cont_ref_get_cont_obj(builder, *original_contref);
-            let call_arg_types = environ.continuation_arguments(*type_index).to_vec();
+
+            if call_args.len() > 0 {
+                let count = builder.ins().iconst(I32, call_args.len() as i64);
+                environ.typed_continuations_store_resume_args(builder, call_args, count, original_contobj);
+            }
 
             // Now, we generate the call instruction.
             let (base_addr, signal, tag) = environ.translate_resume(
                 builder,
                 state,
-                original_contobj,
-                &call_arg_types,
-                call_args,
+                original_contobj
             )?;
             // Description of results:
             // * The `base_addr` is the base address of VM context.
@@ -2543,7 +2545,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             canonicalise_brif(builder, is_zero, return_block, &[], suspend_block, &[]);
 
             // Next, build the suspend block.
-            let contref = {
+            let (contref, contobj) = {
                 builder.switch_to_block(suspend_block);
                 builder.seal_block(suspend_block);
 
@@ -2566,7 +2568,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
                 // We need to terminate this block before being allowed to switch to another one
                 builder.ins().jump(switch_block, &[]);
-                contref
+                (contref, contobj)
             };
 
             // Strategy:
@@ -2609,19 +2611,36 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // the Switch structure and created the blocks it jumps
             // to.
 
-            let forwarding_case =
+            let forwarding_block =
                 crate::translation_utils::resumetable_forwarding_block(builder, environ)?;
+            {
+                builder.switch_to_block(forwarding_block);
+
+                // We suspend, thus deferring handling to the parent.
+                // We do nothing about tag *parameters, these remain unchanged within the
+                // payload buffer associcated with the whole VMContext.
+                environ.translate_suspend(builder, state, tag);
+
+                // When reaching this point, the parent handler has just invoked `resume`.
+                // We propagate to the child (i.e., `contobj`).
+
+                let _parent_contobj = environ.typed_continuations_load_continuation_object(builder, base_addr);
+
+                // FIXME: swap tag return buffers of parent_contobj and contobj
+                //
+                environ.translate_resume(builder, state, contobj);
+
+
+            }
 
             // Switch block (where the actual switching logic is
             // emitted to).
             {
                 builder.switch_to_block(switch_block);
-                switch.emit(builder, tag, forwarding_case);
+                switch.emit(builder, tag, forwarding_block);
                 builder.seal_block(switch_block);
-                builder.switch_to_block(forwarding_case);
-                builder.seal_block(forwarding_case);
-                // TODO: emit effect forwarding logic.
-                builder.ins().trap(ir::TrapCode::UnreachableCodeReached);
+                builder.seal_block(forwarding_block);
+
 
                 // We can only seal the blocks we generated for each
                 // tag now, after switch.emit ran.
@@ -2660,7 +2679,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             environ.typed_continuations_store_payloads(builder, &param_types, params);
             state.popn(param_count);
 
-            let vmctx = environ.translate_suspend(builder, state, *tag_index);
+            let tag_index_val = builder.ins().iconst(I32, *tag_index as i64);
+            let vmctx = environ.translate_suspend(builder, state, tag_index_val);
 
             let contobj = environ.typed_continuations_load_continuation_object(builder, vmctx);
 
