@@ -2562,8 +2562,6 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         //
         // Second: Call the `resume` builtin
 
-
-
         let (vmctx, result) = generate_builtin_call!(self, builder, resume, [contobj]);
 
         // The result encodes whether the return happens via ordinary
@@ -2596,9 +2594,8 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
-        tag_index : ir::Value
+        tag_index: ir::Value,
     ) -> ir::Value {
-
         // Returns the vmctx
         return generate_builtin_call_no_return_val!(self, builder, suspend, [tag_index]);
     }

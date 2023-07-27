@@ -2510,15 +2510,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
             if call_args.len() > 0 {
                 let count = builder.ins().iconst(I32, call_args.len() as i64);
-                environ.typed_continuations_store_resume_args(builder, call_args, count, original_contobj);
+                environ.typed_continuations_store_resume_args(
+                    builder,
+                    call_args,
+                    count,
+                    original_contobj,
+                );
             }
 
             // Now, we generate the call instruction.
-            let (base_addr, signal, tag) = environ.translate_resume(
-                builder,
-                state,
-                original_contobj
-            )?;
+            let (base_addr, signal, tag) =
+                environ.translate_resume(builder, state, original_contobj)?;
             // Description of results:
             // * The `base_addr` is the base address of VM context.
             // * The `signal` is an encoded boolean indicating whether
@@ -2624,13 +2626,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 // When reaching this point, the parent handler has just invoked `resume`.
                 // We propagate to the child (i.e., `contobj`).
 
-                let _parent_contobj = environ.typed_continuations_load_continuation_object(builder, base_addr);
+                let _parent_contobj =
+                    environ.typed_continuations_load_continuation_object(builder, base_addr);
 
                 // FIXME: swap tag return buffers of parent_contobj and contobj
                 //
                 environ.translate_resume(builder, state, contobj)?;
-
-
             }
 
             // Switch block (where the actual switching logic is
@@ -2640,7 +2641,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 switch.emit(builder, tag, forwarding_block);
                 builder.seal_block(switch_block);
                 builder.seal_block(forwarding_block);
-
 
                 // We can only seal the blocks we generated for each
                 // tag now, after switch.emit ran.
