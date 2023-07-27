@@ -2553,8 +2553,6 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
         contobj: ir::Value,
-        _call_arg_types: &[WasmType],
-        call_args: &[ir::Value],
     ) -> WasmResult<(ir::Value, ir::Value, ir::Value)> {
         // Strategy:
         //
@@ -2598,9 +2596,8 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         &mut self,
         builder: &mut FunctionBuilder,
         _state: &FuncTranslationState,
-        ir::Value,
+        tag_index : ir::Value
     ) -> ir::Value {
-        let tag_index = builder.ins().iconst(I32, tag_index as i64);
 
         // Returns the vmctx
         return generate_builtin_call_no_return_val!(self, builder, suspend, [tag_index]);

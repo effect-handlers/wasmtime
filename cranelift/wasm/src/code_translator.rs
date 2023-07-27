@@ -2628,7 +2628,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
                 // FIXME: swap tag return buffers of parent_contobj and contobj
                 //
-                environ.translate_resume(builder, state, contobj);
+                environ.translate_resume(builder, state, contobj)?;
 
 
             }
