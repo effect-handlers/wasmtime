@@ -2517,34 +2517,56 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                     original_contobj,
                 );
             }
-
-            // Now, we generate the call instruction.
-            let (base_addr, signal, tag) =
-                environ.translate_resume(builder, state, original_contobj)?;
-            // Description of results:
-            // * The `base_addr` is the base address of VM context.
-            // * The `signal` is an encoded boolean indicating whether
-            // the `resume` returned ordinarily or via a suspend
-            // instruction.
-            // * The `tag` is the index of the control tag supplied to
-            // suspend (only valid if `signal` is 1).
-
             // Pop the `resume_args` off the stack.
             state.popn(arity + 1);
 
-            // Now, construct blocks for the three continuations:
-            // 1) `resume` returned normally.
-            // 2) `resume` returned via a suspend.
-            // 3) `resume` is forwarding (TODO)
-
-            // Test the signal bit.
-            let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
+            let resume_block = builder.create_block();
             let return_block = crate::translation_utils::return_block(builder, environ)?;
             let suspend_block = crate::translation_utils::suspend_block(builder, environ)?;
             let switch_block = builder.create_block();
-            // Jump to the return block if the signal is 0, otherwise
-            // jump to the suspend block.
-            canonicalise_brif(builder, is_zero, return_block, &[], suspend_block, &[]);
+
+            builder.ins().jump(resume_block, &[original_contobj]);
+
+            let (base_addr, tag) = {
+                builder.switch_to_block(resume_block);
+                builder.append_block_param(resume_block, environ.pointer_type());
+
+                // The continuation object to actually call resume on
+                let resume_contobj = builder.block_params(resume_block)[0];
+
+                // Now, we generate the call instruction.
+                let (base_addr, signal, tag) =
+                    environ.translate_resume(builder, state, resume_contobj)?;
+                // Description of results:
+                // * The `base_addr` is the base address of VM context.
+                // * The `signal` is an encoded boolean indicating whether
+                // the `resume` returned ordinarily or via a suspend
+                // instruction.
+                // * The `tag` is the index of the control tag supplied to
+                // suspend (only valid if `signal` is 1).
+
+                // Now, construct blocks for the three continuations:
+                // 1) `resume` returned normally.
+                // 2) `resume` returned via a suspend.
+                // 3) `resume` is forwarding (TODO)
+
+                // Test the signal bit.
+                let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
+
+                // Jump to the return block if the signal is 0, otherwise
+                // jump to the suspend block.
+                canonicalise_brif(
+                    builder,
+                    is_zero,
+                    return_block,
+                    &[resume_contobj],
+                    suspend_block,
+                    &[],
+                );
+
+                // We do not seal this block, yet, because the effect forwarding block has a back edge to it
+                (base_addr, tag)
+            };
 
             // Next, build the suspend block.
             let (contref, contobj) = {
@@ -2625,13 +2647,11 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
                 // When reaching this point, the parent handler has just invoked `resume`.
                 // We propagate to the child (i.e., `contobj`).
-
                 let _parent_contobj =
                     environ.typed_continuations_load_continuation_object(builder, base_addr);
 
-                // FIXME: swap tag return buffers of parent_contobj and contobj
-                //
-                environ.translate_resume(builder, state, contobj)?;
+                builder.ins().jump(resume_block, &[contobj]);
+                builder.seal_block(resume_block);
             }
 
             // Switch block (where the actual switching logic is
@@ -2652,14 +2672,18 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // Now, finish the return block.
             {
                 builder.switch_to_block(return_block);
+                builder.append_block_param(return_block, environ.pointer_type());
                 builder.seal_block(return_block);
+
+                // The continuation object that resume was called on
+                let resumed_contobj = builder.block_params(return_block)[0];
 
                 // Load and push the results.
                 let returns = environ.continuation_returns(*type_index).to_vec();
                 let values = environ.typed_continuations_load_return_values(
                     builder,
                     &returns,
-                    original_contobj,
+                    resumed_contobj,
                 );
 
                 // The continuation has returned and all `ContinuationReferences`
