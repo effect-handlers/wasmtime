@@ -347,6 +347,10 @@ pub fn resume(
             // entry of the payload store by virtue of using the array
             // calling trampoline to execute it.
 
+            // Restore tsp pointer in instance
+            let parent = unsafe { (*(*contobj).fiber).stack().parent() };
+            instance.set_tsp(TopOfStackPointer::from_raw(parent));
+
             unsafe { (*contobj).state = State::Returned };
             Ok(0) // zero value = return normally.
         }
