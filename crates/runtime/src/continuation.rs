@@ -11,6 +11,14 @@ use wasmtime_fibre::{Fiber, FiberStack, Suspend};
 type ContinuationFiber = Fiber<'static, (), u32, ()>;
 type Yield = Suspend<(), u32, ()>;
 
+const ENABLE_DEBUG_PRINTING: bool = false;
+
+fn debug_print(s: &str) {
+    if ENABLE_DEBUG_PRINTING {
+        println!("{}", s);
+    }
+}
+
 struct Payloads {
     length: usize,
     capacity: usize,
@@ -311,9 +319,12 @@ pub fn cont_new(
         tag_return_values: None,
         state: State::Allocated,
     });
+
     // TODO(dhil): we need memory clean up of
     // continuation reference objects.
-    return Box::into_raw(contobj);
+    let pointer = Box::into_raw(contobj);
+    debug_print(&format!("Created contobj @ {:p}", pointer));
+    return pointer;
 }
 
 /// TODO
@@ -322,6 +333,7 @@ pub fn resume(
     instance: &mut Instance,
     contobj: *mut ContinuationObject,
 ) -> Result<u32, TrapReason> {
+    debug_print(&format!("Resuming contobj @ {:p}", contobj));
     assert!(unsafe { (*contobj).state == State::Allocated || (*contobj).state == State::Invoked });
     let fiber = unsafe { (*contobj).fiber };
     let fiber_stack = unsafe { &fiber.as_ref().unwrap().stack() };
@@ -343,6 +355,7 @@ pub fn resume(
     };
     match unsafe { fiber.as_mut().unwrap().resume(()) } {
         Ok(()) => {
+            debug_print(&format!("Continuation @ {:p} returned normally", contobj));
             // The result of the continuation was written to the first
             // entry of the payload store by virtue of using the array
             // calling trampoline to execute it.
@@ -355,6 +368,8 @@ pub fn resume(
             Ok(0) // zero value = return normally.
         }
         Err(tag) => {
+            debug_print(&format!("Continuation {:p} suspended", contobj));
+
             // We set the high bit to signal a return via suspend. We
             // encode the tag into the remainder of the integer.
             let signal_mask = 0xf000_0000;
