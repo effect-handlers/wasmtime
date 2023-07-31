@@ -2692,6 +2692,20 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         values
     }
 
+    fn typed_continuations_forward_tag_return_values(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        parent_contobj: ir::Value,
+        child_contobj: ir::Value,
+    ) {
+        generate_builtin_call_no_return_val!(
+            self,
+            builder,
+            cont_obj_forward_tag_return_values_buffer,
+            [parent_contobj, child_contobj]
+        );
+    }
+
     /// TODO
     fn typed_continuations_cont_ref_get_cont_obj(
         &mut self,

@@ -2646,9 +2646,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 environ.translate_suspend(builder, state, tag);
 
                 // When reaching this point, the parent handler has just invoked `resume`.
-                // We propagate to the child (i.e., `contobj`).
-                let _parent_contobj =
+                // We propagate the tag return values to the child (i.e., `contobj`).
+                let parent_contobj =
                     environ.typed_continuations_load_continuation_object(builder, base_addr);
+                environ.typed_continuations_forward_tag_return_values(
+                    builder,
+                    parent_contobj,
+                    contobj,
+                );
 
                 builder.ins().jump(resume_block, &[contobj]);
                 builder.seal_block(resume_block);

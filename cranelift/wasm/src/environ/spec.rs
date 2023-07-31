@@ -693,6 +693,14 @@ pub trait FuncEnvironment: TargetEnvironment {
     ) -> std::vec::Vec<ir::Value>;
 
     /// TODO
+    fn typed_continuations_forward_tag_return_values(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        parent_contobj: ir::Value,
+        child_contobj: ir::Value,
+    );
+
+    /// TODO
     fn typed_continuations_store_payloads(
         &mut self,
         builder: &mut FunctionBuilder,

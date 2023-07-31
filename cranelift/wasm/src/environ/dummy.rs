@@ -767,6 +767,16 @@ impl<'dummy_environment> FuncEnvironment for DummyFuncEnvironment<'dummy_environ
         todo!()
     }
 
+    /// TODO
+    fn typed_continuations_forward_tag_return_values(
+        &mut self,
+        _builder: &mut FunctionBuilder,
+        _parent_contobj: ir::Value,
+        _child_contobj: ir::Value,
+    ) {
+        todo!()
+    }
+
     fn typed_continuations_store_resume_args(
         &mut self,
         _builder: &mut FunctionBuilder,
