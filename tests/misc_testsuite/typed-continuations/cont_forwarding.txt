@@ -7,7 +7,7 @@ Simple forwarding, no payloads, no param or return values on function, immediate
 Like 1, but with param and return values on functions (but no tag payloads)
 
 3.
-Tag has parameters (but no return values)
+Tag has payloads (param and return values)
 
 4.
 Tag has param and return values
