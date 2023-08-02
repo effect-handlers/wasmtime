@@ -10,13 +10,10 @@ Like 1, but with param and return values on functions (but no tag payloads)
 Tag has payloads (param and return values)
 
 4.
-Tag has param and return values
-
-5.
 Continuation is not immediately resumed, instead we run a different continuation in the meantime
 
-6.
+5.
 The resumed continuation suspends again, using the same tag
 
-7.
+6.
 The resumed continuation suspends again, using a different tag
