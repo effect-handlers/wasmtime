@@ -10,10 +10,13 @@ Like 1, but with param and return values on functions (but no tag payloads)
 Tag has payloads (param and return values)
 
 4.
-Continuation is not immediately resumed, instead we run a different continuation in the meantime
+Continuation is not immediately resumed, instead we run a different continuation in the meantime.
 
 5.
-The resumed continuation suspends again, using the same tag
+Continuation is not immediately resumed, we pass it to a different one as an argument, increasing the length of the chain by adding yet another useless handler.
 
 6.
-The resumed continuation suspends again, using a different tag
+The resumed continuation suspends again, using the same tag. We install a new handler at the outermost level, which should be forwarded to correctly.
+
+7.
+The resumed continuation suspends again, using a different tag (the "inner" one). We install a new handler for the inner tag, which should have no effect
