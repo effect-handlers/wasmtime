@@ -366,11 +366,11 @@ pub fn resume(
             // calling trampoline to execute it.
 
             // Restore tsp pointer in instance
-            let tsp = TopOfStackPointer::as_raw(instance.tsp());
+            let _tsp = TopOfStackPointer::as_raw(instance.tsp());
             let parent = unsafe { (*(*contobj).fiber).stack().parent() };
             instance.set_tsp(TopOfStackPointer::from_raw(parent));
 
-            debug_println!("Continuation @ {:p} returned normally, setting tsp from {:p} to {:p}", contobj, tsp, parent);
+            debug_println!("Continuation @ {:p} returned normally, setting tsp from {:p} to {:p}", contobj, _tsp, parent);
 
             unsafe { (*contobj).state = State::Returned };
             Ok(0) // zero value = return normally.
