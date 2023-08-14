@@ -11,11 +11,15 @@ use wasmtime_fibre::{Fiber, FiberStack, Suspend};
 type ContinuationFiber = Fiber<'static, (), u32, ()>;
 type Yield = Suspend<(), u32, ()>;
 
+#[allow(dead_code)]
 const ENABLE_DEBUG_PRINTING: bool = false;
 
-fn debug_print(s: &str) {
-    if ENABLE_DEBUG_PRINTING {
-        println!("{}", s);
+macro_rules! debug_println {
+    ($( $args:expr ),+ ) => {
+        #[cfg(debug_assertions)]
+        if ENABLE_DEBUG_PRINTING {
+            println!($($args),*);
+        }
     }
 }
 
@@ -323,7 +327,7 @@ pub fn cont_new(
     // TODO(dhil): we need memory clean up of
     // continuation reference objects.
     let pointer = Box::into_raw(contobj);
-    debug_print(&format!("Created contobj @ {:p}", pointer));
+    debug_println!("Created contobj @ {:p}", pointer);
     return pointer;
 }
 
@@ -333,13 +337,14 @@ pub fn resume(
     instance: &mut Instance,
     contobj: *mut ContinuationObject,
 ) -> Result<u32, TrapReason> {
-    debug_print(&format!("Resuming contobj @ {:p}", contobj));
+
     assert!(unsafe { (*contobj).state == State::Allocated || (*contobj).state == State::Invoked });
     let fiber = unsafe { (*contobj).fiber };
     let fiber_stack = unsafe { &fiber.as_ref().unwrap().stack() };
     let tsp = TopOfStackPointer::as_raw(instance.tsp());
     unsafe { fiber_stack.write_parent(tsp) };
     instance.set_tsp(TopOfStackPointer::from_raw(fiber_stack.top().unwrap()));
+    debug_println!("Resuming contobj @ {:p}, tsp is {:p}, setting it to {:p}", contobj, tsp, fiber_stack.top().unwrap());
     unsafe {
         (*(*(*instance.store()).vmruntime_limits())
             .stack_limit
@@ -355,20 +360,23 @@ pub fn resume(
     };
     match unsafe { fiber.as_mut().unwrap().resume(()) } {
         Ok(()) => {
-            debug_print(&format!("Continuation @ {:p} returned normally", contobj));
+
             // The result of the continuation was written to the first
             // entry of the payload store by virtue of using the array
             // calling trampoline to execute it.
 
             // Restore tsp pointer in instance
+            let tsp = TopOfStackPointer::as_raw(instance.tsp());
             let parent = unsafe { (*(*contobj).fiber).stack().parent() };
             instance.set_tsp(TopOfStackPointer::from_raw(parent));
+
+            debug_println!("Continuation @ {:p} returned normally, setting tsp from {:p} to {:p}", contobj, tsp, parent);
 
             unsafe { (*contobj).state = State::Returned };
             Ok(0) // zero value = return normally.
         }
         Err(tag) => {
-            debug_print(&format!("Continuation {:p} suspended", contobj));
+            debug_println!("Continuation {:p} suspended", contobj);
 
             // We set the high bit to signal a return via suspend. We
             // encode the tag into the remainder of the integer.
@@ -389,6 +397,7 @@ pub fn resume(
 pub fn suspend(instance: &mut Instance, tag_index: u32) {
     let stack_ptr = TopOfStackPointer::as_raw(instance.tsp());
     let parent = unsafe { stack_ptr.cast::<*mut u8>().offset(-2).read() };
+    debug_println!("Suspending, setting tsp from {:p} to {:p}", stack_ptr, parent);
     instance.set_tsp(TopOfStackPointer::from_raw(parent));
     let suspend = wasmtime_fibre::unix::Suspend::from_top_ptr(stack_ptr);
     suspend.switch::<(), u32, ()>(wasmtime_fibre::RunResult::Yield(tag_index))
