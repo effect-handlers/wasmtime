@@ -337,14 +337,18 @@ pub fn resume(
     instance: &mut Instance,
     contobj: *mut ContinuationObject,
 ) -> Result<u32, TrapReason> {
-
     assert!(unsafe { (*contobj).state == State::Allocated || (*contobj).state == State::Invoked });
     let fiber = unsafe { (*contobj).fiber };
     let fiber_stack = unsafe { &fiber.as_ref().unwrap().stack() };
     let tsp = TopOfStackPointer::as_raw(instance.tsp());
     unsafe { fiber_stack.write_parent(tsp) };
     instance.set_tsp(TopOfStackPointer::from_raw(fiber_stack.top().unwrap()));
-    debug_println!("Resuming contobj @ {:p}, tsp is {:p}, setting it to {:p}", contobj, tsp, fiber_stack.top().unwrap());
+    debug_println!(
+        "Resuming contobj @ {:p}, tsp is {:p}, setting it to {:p}",
+        contobj,
+        tsp,
+        fiber_stack.top().unwrap()
+    );
     unsafe {
         (*(*(*instance.store()).vmruntime_limits())
             .stack_limit
@@ -360,7 +364,6 @@ pub fn resume(
     };
     match unsafe { fiber.as_mut().unwrap().resume(()) } {
         Ok(()) => {
-
             // The result of the continuation was written to the first
             // entry of the payload store by virtue of using the array
             // calling trampoline to execute it.
@@ -370,7 +373,12 @@ pub fn resume(
             let parent = unsafe { (*(*contobj).fiber).stack().parent() };
             instance.set_tsp(TopOfStackPointer::from_raw(parent));
 
-            debug_println!("Continuation @ {:p} returned normally, setting tsp from {:p} to {:p}", contobj, _tsp, parent);
+            debug_println!(
+                "Continuation @ {:p} returned normally, setting tsp from {:p} to {:p}",
+                contobj,
+                _tsp,
+                parent
+            );
 
             unsafe { (*contobj).state = State::Returned };
             Ok(0) // zero value = return normally.
@@ -397,7 +405,11 @@ pub fn resume(
 pub fn suspend(instance: &mut Instance, tag_index: u32) {
     let stack_ptr = TopOfStackPointer::as_raw(instance.tsp());
     let parent = unsafe { stack_ptr.cast::<*mut u8>().offset(-2).read() };
-    debug_println!("Suspending, setting tsp from {:p} to {:p}", stack_ptr, parent);
+    debug_println!(
+        "Suspending, setting tsp from {:p} to {:p}",
+        stack_ptr,
+        parent
+    );
     instance.set_tsp(TopOfStackPointer::from_raw(parent));
     let suspend = wasmtime_fibre::unix::Suspend::from_top_ptr(stack_ptr);
     suspend.switch::<(), u32, ()>(wasmtime_fibre::RunResult::Yield(tag_index))
