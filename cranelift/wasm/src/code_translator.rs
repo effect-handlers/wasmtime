@@ -2527,7 +2527,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
             builder.ins().jump(resume_block, &[original_contobj]);
 
-            let (base_addr, tag) = {
+            let (base_addr, tag, resumed_contobj) = {
                 builder.switch_to_block(resume_block);
                 builder.append_block_param(resume_block, environ.pointer_type());
 
@@ -2548,24 +2548,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 // Now, construct blocks for the three continuations:
                 // 1) `resume` returned normally.
                 // 2) `resume` returned via a suspend.
-                // 3) `resume` is forwarding (TODO)
+                // 3) `resume` is forwarding
 
                 // Test the signal bit.
                 let is_zero = builder.ins().icmp_imm(IntCC::Equal, signal, 0);
 
                 // Jump to the return block if the signal is 0, otherwise
                 // jump to the suspend block.
-                canonicalise_brif(
-                    builder,
-                    is_zero,
-                    return_block,
-                    &[resume_contobj],
-                    suspend_block,
-                    &[],
-                );
+                canonicalise_brif(builder, is_zero, return_block, &[], suspend_block, &[]);
 
                 // We do not seal this block, yet, because the effect forwarding block has a back edge to it
-                (base_addr, tag)
+                (base_addr, tag, resume_contobj)
             };
 
             // Next, build the suspend block.
@@ -2677,11 +2670,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // Now, finish the return block.
             {
                 builder.switch_to_block(return_block);
-                builder.append_block_param(return_block, environ.pointer_type());
                 builder.seal_block(return_block);
-
-                // The continuation object that resume was called on
-                let resumed_contobj = builder.block_params(return_block)[0];
 
                 // Load and push the results.
                 let returns = environ.continuation_returns(*type_index).to_vec();
