@@ -1,3 +1,5 @@
+<h1>Development has moved to https://github.com/wasmfx/wasmfxtime</h1>
+<hr>
 <div align="center">
   <h1><code>wasmtime</code></h1>
 
